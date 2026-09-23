@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SmartBuy AI | Intelligent Multi-Platform Product Recommendation</title>
+
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+    <header class="navbar">
+
+        <div class="logo">
+            <div class="logo-icon">S</div>
+            <span>Smart<span>Buy</span> AI</span>
+        </div>
+
+        <nav class="nav-links">
+            <a href="#" class="active">Home</a>
+            <a href="#procedure">Procedure</a>
+            <a href="#features">Features</a>
+            <a href="#about">About</a>
+        </nav>
+
+        <div class="nav-actions">
+            <button class="login-btn">Login</button>
+            <button class="signup-btn">Get Started</button>
+        </div>
+
+    </header>
+
+
+    <!-- ================= HERO SECTION ================= -->
+    <main>
+
+        <section class="hero">
+
+            <div class="hero-content">
+
+                <div class="ai-badge">
+                    <span class="pulse-dot"></span>
+                    Multi-Platform AI Shopping Intelligence
+                </div>
+
+                <h1>
+                    Buy <span>Smarter.</span><br>
+                    Choose with Confidence.
+                </h1>
+
+                <p class="hero-description">
+                    Paste ANY product link from Amazon, Flipkart, Croma, Reliance Digital, Tata CLiQ or enter a product name. Our AI system automatically collects fresh data, analyzes reviews, detects fake reviews, tracks price history, and predicts future prices.
+                </p>
+
+                <!-- SEARCH BOX -->
+                <div class="search-box">
+
+                    <div class="search-icon">
+                        🔍
+                    </div>
+
+                    <input
+                        type="text"
+                        placeholder="Paste ANY product link OR type product name..."
+                        id="productSearch"
+                    >
+
+                    <button id="searchBtn">
+                        Analyze Product
+                    </button>
+
+                </div>
+
+                <div class="search-hint">
+                    Supported stores:
+                    <span class="store-tag">Amazon</span>
+                    <span class="store-tag">Flipkart</span>
+                    <span class="store-tag">Croma</span>
+                    <span class="store-tag">Reliance Digital</span>
+                    <span class="store-tag">Tata CLiQ</span>
+                </div>
+
+                <div class="search-hint" style="margin-top: 8px;">
+                    Try searching:
+                    <span class="sample-pill" onclick="fillSearch('Safari Backpack')">Safari Backpack</span>
+                    <span class="sample-pill" onclick="fillSearch('Sony WH-1000XM5')">Sony WH-1000XM5</span>
+                    <span class="sample-pill" onclick="fillSearch('iPhone 15 128GB')">iPhone 15</span>
+                </div>
+
+            </div>
+
+
+            <!-- HERO VISUAL -->
+            <div class="hero-visual">
+
+                <div class="glow glow-one"></div>
+                <div class="glow glow-two"></div>
+
+                <div class="dashboard-card">
+
+                    <div class="dashboard-header">
+                        <div>
+                            <small>AI MULTI-STORE ANALYSIS</small>
+                            <h3>Smart Shopping Intelligence</h3>
+                        </div>
+
+                        <div class="status-dot">
+                            ●
+                        </div>
+                    </div>
+
+                    <div class="score-section">
+
+                        <div class="score-circle">
+                            <div>
+                                <strong id="heroValueScore">86</strong>
+                                <span>/100</span>
+                            </div>
+                        </div>
+
+                        <div class="score-info">
+                            <h4>Value Score</h4>
+                            <p id="heroValueSubtitle">Optimal overall selection</p>
+
+                            <div class="mini-bar">
+                                <div id="heroScoreBar" style="width: 86%;"></div>
+                            </div>
+                        </div>
+
+                    </div>
+
+
+                    <div class="analysis-grid">
+
+                        <div class="analysis-item">
+                            <span>💰</span>
+                            <div>
+                                <small>Best Price</small>
+                                <strong id="heroBestPrice">₹709</strong>
+                            </div>
+                        </div>
+
+                        <div class="analysis-item">
+                            <span>⭐</span>
+                            <div>
+                                <small>Sentiment</small>
+                                <strong id="heroSentiment">Positive</strong>
+                            </div>
+                        </div>
+
+                        <div class="analysis-item">
+                            <span>🛡️</span>
+                            <div>
+                                <small>Trust Score</small>
+                                <strong id="heroTrustScore">82% Genuine</strong>
+                            </div>
+                        </div>
+
+                        <div class="analysis-item">
+                            <span>📈</span>
+                            <div>
+                                <small>Price Trend</small>
+                                <strong id="heroPriceTrend">Falling 📉</strong>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="recommendation-box">
+
+                        <div class="recommendation-icon">
+                            ✓
+                        </div>
+
+                        <div>
+                            <small>AI Recommendation</small>
+                            <strong id="heroDecision">BUY NOW</strong>
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= LIVE WORKING PROCEDURE STEPPER ================= -->
+        <section class="procedure-section" id="procedureSection" style="display: none;">
+
+            <div class="section-heading">
+                <span>SYSTEM PROCEDURE EXECUTION</span>
+                <h2>Automated Working Procedure</h2>
+                <p>Watch as the AI system executes all 7 pipeline stages in real time.</p>
+            </div>
+
+            <div class="stepper-grid">
+                <div class="step-card" id="step1">
+                    <div class="step-badge">01</div>
+                    <div class="step-icon">📥</div>
+                    <div class="step-body">
+                        <h4>User Input</h4>
+                        <p class="step-status">Processing URL / Query...</p>
+                    </div>
+                </div>
+
+                <div class="step-card" id="step2">
+                    <div class="step-badge">02</div>
+                    <div class="step-icon">🕷️</div>
+                    <div class="step-body">
+                        <h4>Fresh Data Collection</h4>
+                        <p class="step-status">Scraping Multi-Store Prices...</p>
+                    </div>
+                </div>
+
+                <div class="step-card" id="step3">
+                    <div class="step-badge">03</div>
+                    <div class="step-icon">🧠</div>
+                    <div class="step-body">
+                        <h4>Sentiment AI</h4>
+                        <p class="step-status">Evaluating Reviews...</p>
+                    </div>
+                </div>
+
+                <div class="step-card" id="step4">
+                    <div class="step-badge">04</div>
+                    <div class="step-icon">🛡️</div>
+                    <div class="step-body">
+                        <h4>Fake Review ML</h4>
+                        <p class="step-status">Calculating Trust Score...</p>
+                    </div>
+                </div>
+
+                <div class="step-card" id="step5">
+                    <div class="step-badge">05</div>
+                    <div class="step-icon">📊</div>
+                    <div class="step-body">
+                        <h4>Price History</h4>
+                        <p class="step-status">Snapshot Recorded...</p>
+                    </div>
+                </div>
+
+                <div class="step-card" id="step6">
+                    <div class="step-badge">06</div>
+                    <div class="step-icon">📈</div>
+                    <div class="step-body">
+                        <h4>Future Price Prediction</h4>
+                        <p class="step-status">7-Day Forecast...</p>
+                    </div>
+                </div>
+
+                <div class="step-card" id="step7">
+                    <div class="step-badge">07</div>
+                    <div class="step-icon">🤖</div>
+                    <div class="step-body">
+                        <h4>AI Recommendation</h4>
+                        <p class="step-status">Finalizing Verdict...</p>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+
+        <!-- ================= PRODUCT ANALYSIS DASHBOARD ================= -->
+        <section class="analysis-section" id="analysisSection" style="display: none;">
+
+            <div class="analysis-header">
+
+                <div>
+                    <span class="badge-tag">COMPLETE AI ANALYSIS</span>
+                    <h2 id="analysisProductName">Product Analysis</h2>
+                </div>
+
+                <button id="resetSearchBtn" onclick="resetSearch()">
+                    🔍 New Search
+                </button>
+
+            </div>
+
+            <!-- 1. RECOMMENDATION HERO CARD -->
+            <div class="recommendation-hero-card" id="recHeroCard">
+                <div class="rec-header">
+                    <div class="rec-badge-container">
+                        <span class="decision-badge" id="recDecisionBadge">BUY NOW</span>
+                        <span class="value-score-pill">Value Score: <strong id="recValueScore">85.4</strong>/100</span>
+                    </div>
+                    <div class="rec-store-price">
+                        <small>Best Store & Price</small>
+                        <h3 id="recBestStorePrice">Amazon — ₹2,499.00</h3>
+                    </div>
+                </div>
+                <p class="rec-reason" id="recReasonText">
+                    Loading recommendation reasoning...
+                </p>
+            </div>
+
+
+            <!-- 2. PRICE COMPARISON GRID -->
+            <div class="analysis-title">
+                <span>MULTI-STORE COMPARISON</span>
+                <h3>Compare prices across major shopping platforms</h3>
+            </div>
+
+            <div id="priceContainer" class="price-container"></div>
+
+
+            <!-- 3. AI DASHBOARD GRID (SENTIMENT + FAKE REVIEW ML + PRICE HISTORY) -->
+            <div class="dashboard-analytics-grid">
+
+                <!-- SENTIMENT AI CARD -->
+                <div class="analytics-card">
+                    <div class="card-header">
+                        <span class="card-icon">🧠</span>
+                        <div>
+                            <h4>Sentiment AI Engine</h4>
+                            <small>NLP Review Polarity & Customer Mood</small>
+                        </div>
+                    </div>
+
+                    <div class="gauge-box">
+                        <div class="large-score" id="sentimentScoreVal">78.5</div>
+                        <span>/ 100 Sentiment Index</span>
+                    </div>
+
+                    <div class="distribution-bars">
+                        <div class="dist-row">
+                            <span>Positive</span>
+                            <div class="dist-track"><div class="dist-fill green" id="posBar" style="width: 70%;"></div></div>
+                            <strong id="posCount">70%</strong>
+                        </div>
+                        <div class="dist-row">
+                            <span>Neutral</span>
+                            <div class="dist-track"><div class="dist-fill yellow" id="neuBar" style="width: 20%;"></div></div>
+                            <strong id="neuCount">20%</strong>
+                        </div>
+                        <div class="dist-row">
+                            <span>Negative</span>
+                            <div class="dist-track"><div class="dist-fill red" id="negBar" style="width: 10%;"></div></div>
+                            <strong id="negCount">10%</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FAKE REVIEW ML CARD -->
+                <div class="analytics-card">
+                    <div class="card-header">
+                        <span class="card-icon">🛡️</span>
+                        <div>
+                            <h4>Fake Review ML Model</h4>
+                            <span class="model-tag">Random Forest Classifier</span>
+                        </div>
+                    </div>
+
+                    <div class="gauge-box">
+                        <div class="large-score" id="trustScoreVal">84.2%</div>
+                        <span>Review Authenticity Trust Score</span>
+                    </div>
+
+                    <div class="trust-summary">
+                        <div class="trust-pill genuine">
+                            <span>Genuine Reviews</span>
+                            <strong id="genuineCountVal">8</strong>
+                        </div>
+                        <div class="trust-pill fake">
+                            <span>Suspicious Flagged</span>
+                            <strong id="fakeCountVal">2</strong>
+                        </div>
+                    </div>
+
+                    <div class="flagged-reviews-box">
+                        <small>ML Inspection Highlights:</small>
+                        <div id="flaggedReviewsList"></div>
+                    </div>
+                </div>
+
+                <!-- PRICE HISTORY & FUTURE PREDICTION CARD -->
+                <div class="analytics-card full-width">
+                    <div class="card-header">
+                        <span class="card-icon">📈</span>
+                        <div>
+                            <h4>Price History & 7-Day Prediction</h4>
+                            <small>Historical trend points & forecast model</small>
+                        </div>
+                    </div>
+
+                    <div class="prediction-banner">
+                        <div>
+                            <small>7-Day Predicted Price</small>
+                            <h3 id="predPriceVal">₹2,399.00</h3>
+                        </div>
+                        <div class="trend-badge" id="trendBadge">
+                            STABLE ➡️
+                        </div>
+                    </div>
+
+                    <p class="prediction-reason" id="predReasonText">
+                        Analyzing promotional cycle discount rate...
+                    </p>
+
+                    <div class="history-timeline" id="historyTimeline">
+                        <!-- Timeline points inserted dynamically -->
+                    </div>
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================= FEATURES ================= -->
+
+        <section class="features-section" id="features">
+
+            <div class="section-heading">
+
+                <span>SMARTBUY AI ARCHITECTURE</span>
+
+                <h2>
+                    Multi-Store Intelligence
+                    <br>
+                    Powered by <span>Machine Learning & NLP.</span>
+                </h2>
+
+            </div>
+
+
+            <div class="feature-grid">
+
+                <div class="feature-card">
+                    <div class="feature-icon purple">₹</div>
+                    <h3>Multi-Store Price Comparison</h3>
+                    <p>
+                        Scrapes and compares prices across Amazon, Flipkart, Croma, Reliance Digital, and Tata CLiQ in real time.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon blue">🧠</div>
+                    <h3>Sentiment AI</h3>
+                    <p>
+                        Runs NLP TextBlob polarity scoring to measure customer emotion, satisfaction, and rating alignment.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon green">🛡️</div>
+                    <h3>Fake Review ML Model</h3>
+                    <p>
+                        Trained Random Forest classifier identifies incentivized, spam, or fake reviews to calculate genuine Trust Score.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon orange">📈</div>
+                    <h3>7-Day Price Forecast</h3>
+                    <p>
+                        Tracks price history trajectory and predicts future price movements to tell you the ideal time to buy.
+                    </p>
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- ================= FOOTER ================= -->
+
+    <footer id="about">
+
+        <div class="footer-logo">
+            <div class="logo-icon">S</div>
+            <span>Smart<span>Buy</span> AI</span>
+        </div>
+
+        <p>
+            Intelligent product recommendations powered by multi-store data, sentiment AI, and machine learning.
+        </p>
+
+        <div class="footer-bottom">
+            © 2026 SmartBuy AI. Intelligent Product Recommendation System.
+        </div>
+
+    </footer>
+
+
+    <script src="js/app.js"></script>
+
+</body>
+</html>
