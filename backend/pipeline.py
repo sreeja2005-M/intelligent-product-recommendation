@@ -123,25 +123,28 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
     stores = [
         {"name": "Amazon", "url": query if "amazon." in domain else f"https://www.amazon.in/s?k={product_name.replace(' ', '+')}", "mult": 1.0, "orig_mult": 1.25, "avail": "In Stock"},
         {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={product_name.replace(' ', '+')}", "mult": 0.96, "orig_mult": 1.25, "avail": "In Stock"},
-        {"name": "Meesho", "url": query if "meesho." in domain else f"https://www.meesho.com/search?q={product_name.replace(' ', '+')}", "mult": 0.93, "orig_mult": 1.30, "avail": "In Stock"},
+        {"name": "Meesho", "url": query if "meesho." in domain else f"https://www.meesho.com/search?q={product_name.replace(' ', '+')}", "mult": 0.90, "orig_mult": 1.35, "avail": "In Stock"},
         {"name": "Croma", "url": query if "croma." in domain else f"https://www.croma.com/search/?text={product_name.replace(' ', '+')}", "mult": 0.98, "orig_mult": 1.20, "avail": "In Stock"},
         {"name": "Reliance Digital", "url": f"https://www.reliancedigital.in/search?q={product_name.replace(' ', '+')}", "mult": 1.02, "orig_mult": 1.28, "avail": "Limited Stock"},
         {"name": "Tata CLiQ", "url": f"https://www.tatacliq.com/search/?searchCategory=all&text={product_name.replace(' ', '+')}", "mult": 0.99, "orig_mult": 1.22, "avail": "In Stock"}
     ]
 
     price_entries = []
-    for store in stores:
-        c_price = round(base_price * store["mult"], 2)
-        o_price = round(c_price * store["orig_mult"], 2)
-        disc = round(((o_price - c_price) / o_price) * 100, 1)
+    scraped_site = scraped_data.website.lower() if scraped_data else ""
+    scraped_price = float(scraped_data.current_price) if (scraped_data and scraped_data.current_price) else base_price
 
-        # If primary scraped store matches, use scraped price
-        if scraped_data and scraped_data.website.lower() in store["name"].lower() and scraped_data.current_price:
-            c_price = float(scraped_data.current_price)
-            if scraped_data.original_price:
-                o_price = float(scraped_data.original_price)
-            if scraped_data.discount_percent:
-                disc = float(scraped_data.discount_percent)
+    for idx, store in enumerate(stores):
+        is_source_store = (scraped_site and scraped_site in store["name"].lower())
+        if is_source_store:
+            c_price = scraped_price
+            o_price = float(scraped_data.original_price) if (scraped_data and scraped_data.original_price) else round(c_price * 1.35, 2)
+            disc = float(scraped_data.discount_percent) if (scraped_data and scraped_data.discount_percent) else round(((o_price - c_price) / o_price) * 100, 1)
+        else:
+            # Other stores carry a comparative markup relative to the source store
+            markup = (1.08 + (idx * 0.04)) if scraped_site else store["mult"]
+            c_price = round(scraped_price * markup, 2)
+            o_price = round(c_price * store["orig_mult"], 2)
+            disc = round(((o_price - c_price) / o_price) * 100, 1)
 
         price_obj = ProductPrice(
             product_id=product.product_id,
