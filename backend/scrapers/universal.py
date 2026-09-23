@@ -68,6 +68,8 @@ def scrape_universal_product(url: str, html_content: Optional[str] = None) -> Pr
         website_name = 'Amazon'
     elif 'flipkart' in domain:
         website_name = 'Flipkart'
+    elif 'meesho' in domain:
+        website_name = 'Meesho'
     elif 'croma' in domain:
         website_name = 'Croma'
     elif 'reliancedigital' in domain:

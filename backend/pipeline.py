@@ -123,6 +123,7 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
     stores = [
         {"name": "Amazon", "url": query if "amazon." in domain else f"https://www.amazon.in/s?k={product_name.replace(' ', '+')}", "mult": 1.0, "orig_mult": 1.25, "avail": "In Stock"},
         {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={product_name.replace(' ', '+')}", "mult": 0.96, "orig_mult": 1.25, "avail": "In Stock"},
+        {"name": "Meesho", "url": query if "meesho." in domain else f"https://www.meesho.com/search?q={product_name.replace(' ', '+')}", "mult": 0.93, "orig_mult": 1.30, "avail": "In Stock"},
         {"name": "Croma", "url": query if "croma." in domain else f"https://www.croma.com/search/?text={product_name.replace(' ', '+')}", "mult": 0.98, "orig_mult": 1.20, "avail": "In Stock"},
         {"name": "Reliance Digital", "url": f"https://www.reliancedigital.in/search?q={product_name.replace(' ', '+')}", "mult": 1.02, "orig_mult": 1.28, "avail": "Limited Stock"},
         {"name": "Tata CLiQ", "url": f"https://www.tatacliq.com/search/?searchCategory=all&text={product_name.replace(' ', '+')}", "mult": 0.99, "orig_mult": 1.22, "avail": "In Stock"}
