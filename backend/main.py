@@ -27,9 +27,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-app.mount("/css", StaticFiles(directory=frontend_directory / "css"), name="css")
-app.mount("/js", StaticFiles(directory=frontend_directory / "js"), name="js")
-app.mount("/assets", StaticFiles(directory=frontend_directory / "assets"), name="assets")
+for static_folder in ["css", "js", "assets"]:
+    folder_path = frontend_directory / static_folder
+    folder_path.mkdir(parents=True, exist_ok=True)
+    app.mount(f"/{static_folder}", StaticFiles(directory=folder_path), name=static_folder)
 
 app.add_middleware(
     CORSMiddleware,
