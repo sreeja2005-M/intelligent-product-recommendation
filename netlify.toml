@@ -1,0 +1,11 @@
+# Netlify Configuration File
+# Serves static frontend from the 'frontend' directory
+
+[build]
+  publish = "frontend"
+
+# SPA / Static route fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

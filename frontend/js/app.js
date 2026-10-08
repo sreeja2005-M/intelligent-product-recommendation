@@ -2,11 +2,14 @@
 // SMARTBUY AI - FRONTEND JAVASCRIPT & PIPELINE STEPPER
 // =========================================================
 
-// API Base URL config: supports Vercel decoupled frontend & unified server
+// API Base URL config: supports Netlify/Vercel decoupled frontend & local unified server
 const RENDER_BACKEND_URL = "https://intelligent-product-recommendation.onrender.com";
-const API_BASE_URL = (window.location.hostname.includes("vercel.app"))
-    ? RENDER_BACKEND_URL
-    : window.location.origin;
+const isLocalhost = Boolean(
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1" ||
+    window.location.hostname === "[::1]"
+);
+const API_BASE_URL = isLocalhost ? window.location.origin : RENDER_BACKEND_URL;
 
 const searchButton = document.getElementById("searchBtn");
 const searchInput = document.getElementById("productSearch");
