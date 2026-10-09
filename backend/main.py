@@ -27,18 +27,21 @@ app = FastAPI(
     version="1.0.0"
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_origin_regex="https://.*\.netlify\.app",
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"]
+)
+
 for static_folder in ["css", "js", "assets"]:
     folder_path = frontend_directory / static_folder
     folder_path.mkdir(parents=True, exist_ok=True)
     app.mount(f"/{static_folder}", StaticFiles(directory=folder_path), name=static_folder)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 # Database session
