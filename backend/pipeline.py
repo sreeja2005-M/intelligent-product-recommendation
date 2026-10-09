@@ -1,9 +1,50 @@
 import re
 import random
 from datetime import datetime, timedelta
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote_plus
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
+
+
+def estimate_realistic_base_price(product_name: str, query: str) -> float:
+    text = (product_name + " " + query).lower()
+    
+    explicit_match = re.search(r'(?:rs\.?|inr|₹)?\s*(\d{4,6})', text, re.IGNORECASE)
+    if explicit_match:
+        val = float(explicit_match.group(1))
+        if 499 <= val <= 250000:
+            return val
+
+    if any(k in text for k in ["iphone 15 pro", "iphone 16 pro", "s24 ultra", "macbook pro"]):
+        return 124900.0
+    elif any(k in text for k in ["iphone 15", "iphone 14", "s24", "macbook air"]):
+        return 64990.0
+    elif any(k in text for k in ["iphone", "gaming laptop", "rtx 4060", "rtx 3050"]):
+        return 54990.0
+    elif any(k in text for k in ["laptop", "notebook", "thinkpad", "pavilion", "vivobook"]):
+        return 42990.0
+    elif any(k in text for k in ["ipad", "tablet", "oneplus 12", "galaxy tab"]):
+        return 28990.0
+    elif any(k in text for k in ["sony wh", "bose", "airpods pro", "apple watch"]):
+        return 24990.0
+    elif any(k in text for k in ["smart tv", "55 inch", "43 inch", "bravia", "oled"]):
+        return 32990.0
+    elif any(k in text for k in ["phone", "mobile", "redmi", "realme", "poco", "iqoo", "smartphone"]):
+        return 14999.0
+    elif any(k in text for k in ["smartwatch", "galaxy watch", "fire-boltt", "noise watch", "amazfit"]):
+        return 2499.0
+    elif any(k in text for k in ["earbuds", "tws", "airpods", "boat", "headphone", "earphone", "speaker"]):
+        return 1499.0
+    elif any(k in text for k in ["safari", "backpack", "american tourister", "skybags", "bag", "trolley", "luggage"]):
+        return 1199.0
+    elif any(k in text for k in ["shoe", "sneaker", "nike", "adidas", "puma"]):
+        return 2999.0
+    elif any(k in text for k in ["shirt", "jeans", "t-shirt", "jacket", "dress", "saree", "kurti"]):
+        return 799.0
+    else:
+        hash_val = sum(ord(c) for c in text)
+        return float(1299 + ((hash_val * 47) % 2500))
+
 
 from backend.database import SessionLocal
 from backend.models import (
@@ -112,26 +153,29 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         db.commit()
         db.refresh(product)
 
-    # Establish baseline price for multi-store price generation
-    base_price = scraped_data.current_price if (scraped_data and scraped_data.current_price) else 2499.0
-    if base_price <= 0:
-        base_price = 2499.0
+    # Establish baseline price with category-aware price estimator fallback
+    if scraped_data and scraped_data.current_price and float(scraped_data.current_price) > 0:
+        base_price = float(scraped_data.current_price)
+    else:
+        base_price = estimate_realistic_base_price(product_name, query)
 
     # Clean existing prices for fresh baseline or fetch multi-store pricing
     db.query(ProductPrice).filter(ProductPrice.product_id == product.product_id).delete()
 
+    encoded_name = quote_plus(product_name)
+
     stores = [
-        {"name": "Amazon", "url": query if "amazon." in domain else f"https://www.amazon.in/s?k={product_name.replace(' ', '+')}", "mult": 1.0, "orig_mult": 1.25, "avail": "In Stock"},
-        {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={product_name.replace(' ', '+')}", "mult": 0.96, "orig_mult": 1.25, "avail": "In Stock"},
-        {"name": "Meesho", "url": query if "meesho." in domain else f"https://www.meesho.com/search?q={product_name.replace(' ', '+')}", "mult": 0.90, "orig_mult": 1.35, "avail": "In Stock"},
-        {"name": "Croma", "url": query if "croma." in domain else f"https://www.croma.com/search/?text={product_name.replace(' ', '+')}", "mult": 0.98, "orig_mult": 1.20, "avail": "In Stock"},
-        {"name": "Reliance Digital", "url": f"https://www.reliancedigital.in/search?q={product_name.replace(' ', '+')}", "mult": 1.02, "orig_mult": 1.28, "avail": "Limited Stock"},
-        {"name": "Tata CLiQ", "url": f"https://www.tatacliq.com/search/?searchCategory=all&text={product_name.replace(' ', '+')}", "mult": 0.99, "orig_mult": 1.22, "avail": "In Stock"}
+        {"name": "Amazon", "url": query if "amazon." in domain else f"https://www.amazon.in/s?k={encoded_name}", "mult": 1.0, "orig_mult": 1.25, "avail": "In Stock"},
+        {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={encoded_name}", "mult": 0.96, "orig_mult": 1.25, "avail": "In Stock"},
+        {"name": "Meesho", "url": query if "meesho." in domain else f"https://www.meesho.com/search?q={encoded_name}", "mult": 0.90, "orig_mult": 1.35, "avail": "In Stock"},
+        {"name": "Croma", "url": query if "croma." in domain else f"https://www.croma.com/search/?text={encoded_name}", "mult": 0.98, "orig_mult": 1.20, "avail": "In Stock"},
+        {"name": "Reliance Digital", "url": f"https://www.reliancedigital.in/search?q={encoded_name}", "mult": 1.02, "orig_mult": 1.28, "avail": "Limited Stock"},
+        {"name": "Tata CLiQ", "url": f"https://www.tatacliq.com/search/?searchCategory=all&text={encoded_name}", "mult": 0.99, "orig_mult": 1.22, "avail": "In Stock"}
     ]
 
     price_entries = []
     scraped_site = scraped_data.website.lower() if scraped_data else ""
-    scraped_price = float(scraped_data.current_price) if (scraped_data and scraped_data.current_price) else base_price
+    scraped_price = base_price
 
     for idx, store in enumerate(stores):
         is_source_store = (scraped_site and scraped_site in store["name"].lower())

@@ -296,35 +296,161 @@ function generateMockPipelineData(query) {
         try {
             const cleanUrl = query.startsWith("www.") ? "https://" + query : query;
             const urlObj = new URL(cleanUrl);
-            const pathParts = urlObj.pathname.split("/").filter(p => p.length > 2 && p !== "dp" && p !== "product" && p !== "p");
-            if (pathParts.length > 0) {
-                productName = pathParts[0].replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+            
+            const searchParams = urlObj.searchParams;
+            const paramTitle = searchParams.get("k") || searchParams.get("q") || searchParams.get("text") || searchParams.get("keywords");
+
+            if (paramTitle) {
+                productName = paramTitle.replace(/\+/g, " ").trim();
             } else {
-                productName = urlObj.hostname.replace("www.", "").split(".")[0].toUpperCase() + " Product";
+                const pathParts = urlObj.pathname.split("/").filter(p => {
+                    if (!p || p.length < 3) return false;
+                    const lower = p.toLowerCase();
+                    if (["dp", "gp", "product", "p", "buy", "itm", "electronics"].includes(lower)) return false;
+                    if (/^[a-zA-Z0-9]{10}$/.test(p)) return false; // Ignore ASINs like B07V2Q7K3Y
+                    if (/^itm[a-zA-Z0-9]+$/i.test(p)) return false; // Ignore Flipkart item IDs
+                    return true;
+                });
+
+                if (pathParts.length > 0) {
+                    pathParts.sort((a, b) => b.length - a.length);
+                    productName = pathParts[0]
+                        .replace(/[-_]/g, " ")
+                        .replace(/\b(ref|qid|sr|pf_rd_\w+|pd_rd_\w+).*/g, "")
+                        .replace(/\s+/g, " ")
+                        .trim()
+                        .replace(/\b\w/g, c => c.toUpperCase());
+                } else {
+                    productName = urlObj.hostname.replace("www.", "").split(".")[0].toUpperCase() + " Featured Product";
+                }
             }
         } catch (e) {
             productName = "Smart Buy Product";
         }
     }
 
-    let hash = 0;
-    for (let i = 0; i < query.length; i++) hash += query.charCodeAt(i);
-    const basePrice = 899 + ((hash * 137) % 18500);
+    productName = productName.replace(/\s+/g, " ").trim();
+    if (productName.length < 4) productName = "Smart Electronics Product";
+
+    // Detect Category & Estimate Realistic Baseline Indian Retail Price
+    const text = (productName + " " + query).toLowerCase();
+    let basePrice = 0;
+
+    const explicitMatch = text.match(/(?:rs\.?|inr|₹)?\s*(\d{4,6})/i);
+    if (explicitMatch) {
+        const val = parseInt(explicitMatch[1], 10);
+        if (val >= 499 && val <= 250000) {
+            basePrice = val;
+        }
+    }
+
+    if (!basePrice) {
+        if (text.includes("iphone 15 pro") || text.includes("iphone 16 pro") || text.includes("s24 ultra") || text.includes("macbook pro")) {
+            basePrice = 124900;
+        } else if (text.includes("iphone 15") || text.includes("iphone 14") || text.includes("s24") || text.includes("macbook air")) {
+            basePrice = 64990;
+        } else if (text.includes("iphone") || text.includes("gaming laptop") || text.includes("rtx 4060") || text.includes("rtx 3050")) {
+            basePrice = 54990;
+        } else if (text.includes("laptop") || text.includes("notebook") || text.includes("thinkpad") || text.includes("pavilion") || text.includes("vivobook")) {
+            basePrice = 42990;
+        } else if (text.includes("ipad") || text.includes("tablet") || text.includes("oneplus 12") || text.includes("galaxy tab")) {
+            basePrice = 28990;
+        } else if (text.includes("sony wh") || text.includes("bose") || text.includes("airpods pro") || text.includes("apple watch")) {
+            basePrice = 24990;
+        } else if (text.includes("smart tv") || text.includes("55 inch") || text.includes("43 inch") || text.includes("bravia") || text.includes("oled")) {
+            basePrice = 32990;
+        } else if (text.includes("phone") || text.includes("mobile") || text.includes("redmi") || text.includes("realme") || text.includes("poco") || text.includes("iqoo") || text.includes("smartphone")) {
+            basePrice = 14999;
+        } else if (text.includes("smartwatch") || text.includes("galaxy watch") || text.includes("fire-boltt") || text.includes("noise watch") || text.includes("amazfit")) {
+            basePrice = 2499;
+        } else if (text.includes("earbuds") || text.includes("tws") || text.includes("airpods") || text.includes("boat") || text.includes("headphone") || text.includes("speaker")) {
+            basePrice = 1499;
+        } else if (text.includes("safari") || text.includes("backpack") || text.includes("american tourister") || text.includes("skybags") || text.includes("bag") || text.includes("trolley") || text.includes("luggage")) {
+            basePrice = 1199;
+        } else if (text.includes("shoe") || text.includes("sneaker") || text.includes("nike") || text.includes("adidas") || text.includes("puma")) {
+            basePrice = 2999;
+        } else if (text.includes("shirt") || text.includes("jeans") || text.includes("t-shirt") || text.includes("jacket") || text.includes("dress") || text.includes("saree") || text.includes("kurti")) {
+            basePrice = 799;
+        } else {
+            let hash = 0;
+            for (let i = 0; i < text.length; i++) hash += text.charCodeAt(i);
+            basePrice = 1299 + ((hash * 47) % 2500);
+        }
+    }
+
+    const isSourceAmazon = isUrl && query.includes("amazon");
+    const isSourceFlipkart = isUrl && query.includes("flipkart");
+    const isSourceMeesho = isUrl && query.includes("meesho");
+    const isSourceCroma = isUrl && query.includes("croma");
+    const isSourceReliance = isUrl && query.includes("reliancedigital");
+    const isSourceTata = isUrl && query.includes("tatacliq");
+
+    const storeSearchTerm = encodeURIComponent(productName);
 
     const prices = [
-        { website_name: "Amazon", current_price: Math.round(basePrice * 0.94), original_price: Math.round(basePrice * 1.30), discount_percent: 28, availability: "In Stock", product_url: isUrl && query.includes("amazon") ? query : `https://www.amazon.in/s?k=${encodeURIComponent(productName)}`, is_lowest: true },
-        { website_name: "Flipkart", current_price: Math.round(basePrice * 0.97), original_price: Math.round(basePrice * 1.25), discount_percent: 22, availability: "In Stock", product_url: isUrl && query.includes("flipkart") ? query : `https://www.flipkart.com/search?q=${encodeURIComponent(productName)}`, is_lowest: false },
-        { website_name: "Meesho", current_price: Math.round(basePrice * 0.91), original_price: Math.round(basePrice * 1.35), discount_percent: 33, availability: "In Stock", product_url: `https://www.meesho.com/search?q=${encodeURIComponent(productName)}`, is_lowest: false },
-        { website_name: "Croma", current_price: Math.round(basePrice * 1.02), original_price: Math.round(basePrice * 1.20), discount_percent: 15, availability: "In Stock", product_url: `https://www.croma.com/search/?text=${encodeURIComponent(productName)}`, is_lowest: false },
-        { website_name: "Reliance Digital", current_price: Math.round(basePrice * 1.05), original_price: Math.round(basePrice * 1.28), discount_percent: 18, availability: "Limited Stock", product_url: `https://www.reliancedigital.in/search?q=${encodeURIComponent(productName)}`, is_lowest: false },
-        { website_name: "Tata CLiQ", current_price: Math.round(basePrice * 0.99), original_price: Math.round(basePrice * 1.22), discount_percent: 19, availability: "In Stock", product_url: `https://www.tatacliq.com/search/?text=${encodeURIComponent(productName)}`, is_lowest: false }
+        {
+            website_name: "Amazon",
+            current_price: Math.round(basePrice * (isSourceAmazon ? 1.0 : 0.96)),
+            original_price: Math.round(basePrice * 1.30),
+            discount_percent: 26,
+            availability: "In Stock",
+            product_url: isSourceAmazon ? query : `https://www.amazon.in/s?k=${storeSearchTerm}`,
+            is_lowest: false
+        },
+        {
+            website_name: "Flipkart",
+            current_price: Math.round(basePrice * (isSourceFlipkart ? 1.0 : 0.94)),
+            original_price: Math.round(basePrice * 1.25),
+            discount_percent: 25,
+            availability: "In Stock",
+            product_url: isSourceFlipkart ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}`,
+            is_lowest: false
+        },
+        {
+            website_name: "Meesho",
+            current_price: Math.round(basePrice * (isSourceMeesho ? 1.0 : 0.91)),
+            original_price: Math.round(basePrice * 1.35),
+            discount_percent: 33,
+            availability: "In Stock",
+            product_url: isSourceMeesho ? query : `https://www.meesho.com/search?q=${storeSearchTerm}`,
+            is_lowest: false
+        },
+        {
+            website_name: "Croma",
+            current_price: Math.round(basePrice * (isSourceCroma ? 1.0 : 0.98)),
+            original_price: Math.round(basePrice * 1.20),
+            discount_percent: 18,
+            availability: "In Stock",
+            product_url: isSourceCroma ? query : `https://www.croma.com/search/?text=${storeSearchTerm}`,
+            is_lowest: false
+        },
+        {
+            website_name: "Reliance Digital",
+            current_price: Math.round(basePrice * (isSourceReliance ? 1.0 : 1.02)),
+            original_price: Math.round(basePrice * 1.28),
+            discount_percent: 20,
+            availability: "Limited Stock",
+            product_url: isSourceReliance ? query : `https://www.reliancedigital.in/search?q=${storeSearchTerm}`,
+            is_lowest: false
+        },
+        {
+            website_name: "Tata CLiQ",
+            current_price: Math.round(basePrice * (isSourceTata ? 1.0 : 0.97)),
+            original_price: Math.round(basePrice * 1.22),
+            discount_percent: 21,
+            availability: "In Stock",
+            product_url: isSourceTata ? query : `https://www.tatacliq.com/search/?searchCategory=all&text=${storeSearchTerm}`,
+            is_lowest: false
+        }
     ];
 
     let lowestPriceObj = prices.reduce((prev, curr) => (prev.current_price < curr.current_price ? prev : curr));
     prices.forEach(p => p.is_lowest = (p.website_name === lowestPriceObj.website_name));
 
-    const sentimentScore = Math.min(95, Math.max(55, 78.5 + ((hash % 15) - 7)));
-    const trustScore = Math.min(98, Math.max(60, 84.2 + ((hash % 12) - 6)));
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) hash += text.charCodeAt(i);
+    const sentimentScore = Math.min(95, Math.max(58, 78.5 + ((hash % 15) - 7)));
+    const trustScore = Math.min(98, Math.max(62, 84.2 + ((hash % 12) - 6)));
     const valueScore = Math.min(96, Math.max(65, Math.round((sentimentScore * 0.4) + (trustScore * 0.4) + 15)));
     const predPrice = Math.round(lowestPriceObj.current_price * 0.96);
 
