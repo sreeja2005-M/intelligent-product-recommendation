@@ -297,29 +297,29 @@ function generateMockPipelineData(query) {
             const cleanUrl = query.startsWith("www.") ? "https://" + query : query;
             const urlObj = new URL(cleanUrl);
             
-            const searchParams = urlObj.searchParams;
-            const paramTitle = searchParams.get("k") || searchParams.get("q") || searchParams.get("text") || searchParams.get("keywords");
+            // 1. Try Pathname Slug First (e.g. /safari-ashper-cb-6-pockets-30-l-laptop-backpack/p/itm...)
+            const pathParts = urlObj.pathname.split("/").filter(p => {
+                if (!p || p.length < 3) return false;
+                const lower = p.toLowerCase();
+                if (["dp", "gp", "product", "p", "buy", "itm", "electronics", "reh"].includes(lower)) return false;
+                if (/^[a-zA-Z0-9]{10}$/.test(p)) return false; // Ignore ASINs like B07V2Q7K3Y
+                if (/^itm[a-zA-Z0-9]+$/i.test(p)) return false; // Ignore Flipkart item IDs
+                return true;
+            });
 
-            if (paramTitle) {
-                productName = paramTitle.replace(/\+/g, " ").trim();
+            if (pathParts.length > 0) {
+                pathParts.sort((a, b) => b.length - a.length);
+                productName = pathParts[0]
+                    .replace(/[-_]/g, " ")
+                    .replace(/\b(ref|qid|sr|pf_rd_\w+|pd_rd_\w+).*/g, "")
+                    .replace(/\s+/g, " ")
+                    .trim()
+                    .replace(/\b\w/g, c => c.toUpperCase());
             } else {
-                const pathParts = urlObj.pathname.split("/").filter(p => {
-                    if (!p || p.length < 3) return false;
-                    const lower = p.toLowerCase();
-                    if (["dp", "gp", "product", "p", "buy", "itm", "electronics"].includes(lower)) return false;
-                    if (/^[a-zA-Z0-9]{10}$/.test(p)) return false; // Ignore ASINs like B07V2Q7K3Y
-                    if (/^itm[a-zA-Z0-9]+$/i.test(p)) return false; // Ignore Flipkart item IDs
-                    return true;
-                });
-
-                if (pathParts.length > 0) {
-                    pathParts.sort((a, b) => b.length - a.length);
-                    productName = pathParts[0]
-                        .replace(/[-_]/g, " ")
-                        .replace(/\b(ref|qid|sr|pf_rd_\w+|pd_rd_\w+).*/g, "")
-                        .replace(/\s+/g, " ")
-                        .trim()
-                        .replace(/\b\w/g, c => c.toUpperCase());
+                const searchParams = urlObj.searchParams;
+                const paramTitle = searchParams.get("k") || searchParams.get("q") || searchParams.get("text") || searchParams.get("keywords");
+                if (paramTitle) {
+                    productName = paramTitle.replace(/\+/g, " ").trim();
                 } else {
                     productName = urlObj.hostname.replace("www.", "").split(".")[0].toUpperCase() + " Featured Product";
                 }
@@ -332,14 +332,15 @@ function generateMockPipelineData(query) {
     productName = productName.replace(/\s+/g, " ").trim();
     if (productName.length < 4) productName = "Smart Electronics Product";
 
-    // Detect Category & Estimate Realistic Baseline Indian Retail Price
-    const text = (productName + " " + query).toLowerCase();
+    // Detect Category & Estimate Realistic Baseline Indian Retail Price ONLY on clean title
+    const text = productName.toLowerCase();
     let basePrice = 0;
 
-    const explicitMatch = text.match(/(?:rs\.?|inr|₹)?\s*(\d{4,6})/i);
+    // Explicit price match ONLY if formatted with currency symbols (e.g., "₹799" or "Rs 699")
+    const explicitMatch = text.match(/(?:rs\.?|inr|₹|price)\s*:?\s*(\d{3,6})/i);
     if (explicitMatch) {
         const val = parseInt(explicitMatch[1], 10);
-        if (val >= 499 && val <= 250000) {
+        if (val >= 199 && val <= 250000) {
             basePrice = val;
         }
     }
@@ -366,15 +367,15 @@ function generateMockPipelineData(query) {
         } else if (text.includes("earbuds") || text.includes("tws") || text.includes("airpods") || text.includes("boat") || text.includes("headphone") || text.includes("speaker")) {
             basePrice = 1499;
         } else if (text.includes("safari") || text.includes("backpack") || text.includes("american tourister") || text.includes("skybags") || text.includes("bag") || text.includes("trolley") || text.includes("luggage")) {
-            basePrice = 1199;
+            basePrice = 799; // Safari 30L Backpack retail price (~₹699 - ₹899)
         } else if (text.includes("shoe") || text.includes("sneaker") || text.includes("nike") || text.includes("adidas") || text.includes("puma")) {
-            basePrice = 2999;
+            basePrice = 2499;
         } else if (text.includes("shirt") || text.includes("jeans") || text.includes("t-shirt") || text.includes("jacket") || text.includes("dress") || text.includes("saree") || text.includes("kurti")) {
-            basePrice = 799;
+            basePrice = 699;
         } else {
             let hash = 0;
             for (let i = 0; i < text.length; i++) hash += text.charCodeAt(i);
-            basePrice = 1299 + ((hash * 47) % 2500);
+            basePrice = 699 + ((hash * 47) % 1200);
         }
     }
 
