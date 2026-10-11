@@ -206,14 +206,23 @@ function renderDashboard(data) {
     const priceContainer = document.getElementById("priceContainer");
     priceContainer.innerHTML = "";
 
+    const isInputUrl = Boolean(searchInput && searchInput.value && (searchInput.value.trim().startsWith("http://") || searchInput.value.trim().startsWith("https://") || searchInput.value.trim().startsWith("www.")));
+
     prices.forEach(p => {
         const card = document.createElement("div");
         card.className = `price-card ${p.is_lowest ? 'lowest-store' : ''}`;
         
+        const isVerifiedSource = Boolean(p.is_source || (isInputUrl && p.is_lowest));
+        const badgeHtml = p.is_lowest
+            ? (isVerifiedSource ? '<span class="lowest-badge verified-badge">✓ VERIFIED BEST DEAL</span>' : '<span class="lowest-badge">✓ LOWEST PRICE</span>')
+            : '';
+
+        const btnText = isVerifiedSource ? `Buy on ${p.website_name} ↗` : `Compare on ${p.website_name} ↗`;
+
         card.innerHTML = `
             <div class="store-header">
                 <span class="store-name">${p.website_name}</span>
-                ${p.is_lowest ? '<span class="lowest-badge">✓ LOWEST PRICE</span>' : ''}
+                ${badgeHtml}
             </div>
             
             <div class="store-price-main">
@@ -227,8 +236,8 @@ function renderDashboard(data) {
             
             <span class="availability">● ${p.availability || 'In Stock'}</span>
             
-            <a href="${p.product_url || '#'}" target="_blank" rel="noopener noreferrer" class="visit-store-btn">
-                Visit ${p.website_name} ↗
+            <a href="${p.product_url || '#'}" target="_blank" rel="noopener noreferrer" class="visit-store-btn ${isVerifiedSource ? 'direct-deal-btn' : ''}">
+                ${btnText}
             </a>
         `;
         priceContainer.appendChild(card);
@@ -439,9 +448,20 @@ function generateMockPipelineData(query) {
         ];
     }
 
-    const prices = stores.map(store => {
+    const prices = stores.map((store, idx) => {
         const isSource = (isSourceFlipkart && store.name === "Flipkart") || (isSourceAmazon && store.name === "Amazon") || (isSourceMeesho && store.name === "Meesho");
-        const cPrice = isSource ? basePrice : Math.round(basePrice * store.mult);
+        let cPrice;
+        let avail = store.avail;
+        if (isSource) {
+            cPrice = basePrice;
+            avail = "In Stock (Verified Deal)";
+        } else if (isUrl) {
+            // Competitor shopping alternatives carry realistic retail comparison pricing above the verified deal
+            cPrice = Math.round(basePrice * (1.05 + idx * 0.03));
+            avail = "In Stock";
+        } else {
+            cPrice = Math.round(basePrice * store.mult);
+        }
         const oPrice = Math.max(originalPrice, Math.round(cPrice * 1.15));
         const disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
         return {
@@ -449,13 +469,14 @@ function generateMockPipelineData(query) {
             current_price: cPrice,
             original_price: oPrice,
             discount_percent: disc,
-            availability: store.avail,
+            availability: avail,
             product_url: store.url,
-            is_lowest: false
+            is_lowest: false,
+            is_source: isSource
         };
     });
 
-    let lowestPriceObj = prices.reduce((prev, curr) => (prev.current_price < curr.current_price ? prev : curr));
+    let lowestPriceObj = prices.find(p => p.is_source) || prices.reduce((prev, curr) => (prev.current_price < curr.current_price ? prev : curr));
     prices.forEach(p => p.is_lowest = (p.website_name === lowestPriceObj.website_name));
 
     let hash = 0;

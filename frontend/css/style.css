@@ -1657,6 +1657,12 @@ footer > p {
     border-radius: 4px;
 }
 
+.lowest-badge.verified-badge {
+    background: rgba(34, 197, 94, 0.18);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
 .visit-store-btn {
     display: block;
     margin-top: 15px;
@@ -1673,6 +1679,18 @@ footer > p {
 .visit-store-btn:hover {
     background: #6366f1;
     color: #ffffff;
+}
+
+.visit-store-btn.direct-deal-btn {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #ffffff;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35);
+    font-weight: 700;
+}
+
+.visit-store-btn.direct-deal-btn:hover {
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    transform: translateY(-1px);
 }
 
 
