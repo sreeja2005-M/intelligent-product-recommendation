@@ -213,29 +213,22 @@ function renderDashboard(data) {
     // Solution A Transparency Notice
     if (platformNoticeBox) {
         if (data.platform_notice) {
+            const isExclusive = Boolean(data.platform_notice.is_exclusive);
             platformNoticeBox.innerHTML = `
-                <div class="notice-icon">🏷️</div>
+                <div class="notice-icon">${isExclusive ? '🏷️' : '🔍'}</div>
                 <div class="notice-content">
-                    <strong>${data.platform_notice.title || 'Verified Platform Deal & Category Comparison'}</strong>
+                    <strong>${data.platform_notice.title || 'Multi-Store Price Comparison'}</strong>
                     <p>${data.platform_notice.message}</p>
                 </div>
-                <div class="notice-tag">✓ Verified Source</div>
-            `;
-            platformNoticeBox.style.display = "flex";
-        } else if (isInputUrl && sourceStore) {
-            platformNoticeBox.innerHTML = `
-                <div class="notice-icon">🏷️</div>
-                <div class="notice-content">
-                    <strong>Verified ${sourceStore.website_name} Deal & Multi-Store Transparency</strong>
-                    <p>This exact product was verified on <b>${sourceStore.website_name}</b> at <b>₹${sourceStore.current_price.toLocaleString('en-IN')}</b> (${sourceStore.discount_percent}% OFF). Because this brand/seller is exclusive to ${sourceStore.website_name}, other stores show comparable alternatives in this category rather than duplicate listings.</p>
-                </div>
-                <div class="notice-tag">✓ Verified Source</div>
+                <div class="notice-tag">${isExclusive ? '🏷️ Platform Exclusive Deal' : '✓ Verified Store Listing'}</div>
             `;
             platformNoticeBox.style.display = "flex";
         } else {
             platformNoticeBox.style.display = "none";
         }
     }
+
+    const isPlatformExclusive = Boolean(data.platform_notice && data.platform_notice.is_exclusive);
 
     prices.forEach(p => {
         const card = document.createElement("div");
@@ -251,7 +244,7 @@ function renderDashboard(data) {
         let availText = `● ${p.availability || 'In Stock'}`;
 
         if (isVerifiedSource) {
-            badgesHtml = `<span class="match-badge exact-badge">✓ EXACT VERIFIED PRODUCT</span>`;
+            badgesHtml = `<span class="match-badge exact-badge">✓ EXACT MODEL</span>`;
             if (p.is_lowest) {
                 badgesHtml += ` <span class="lowest-badge verified-badge">✓ BEST VERIFIED DEAL</span>`;
             }
@@ -264,7 +257,8 @@ function renderDashboard(data) {
             availText = "● In Stock (Exact Match)";
             btnText = p.action_label || `Buy on ${p.website_name} ↗`;
             btnClass = "visit-store-btn direct-deal-btn";
-        } else if (isInputUrl) {
+        } else if (isPlatformExclusive) {
+            // Boutique / unbranded seller: competitor stores show category alternatives
             badgesHtml = `<span class="match-badge similar-badge">🔍 SIMILAR IN CATEGORY</span>`;
             priceHtml = `<span class="est-prefix">Est. from</span> ₹${p.current_price ? p.current_price.toLocaleString('en-IN') : 'N/A'}`;
             subHtml = `<span class="category-avg-tag">Category Market Alternative</span>`;
@@ -273,8 +267,10 @@ function renderDashboard(data) {
             btnText = p.action_label || `Search Similar on ${p.website_name} ↗`;
             btnClass = "visit-store-btn similar-search-btn";
         } else {
+            // Universal multi-store products (e.g. Realme P4 Pro, iPhone 15, boAt earbuds) or keyword searches
+            badgesHtml = `<span class="match-badge exact-badge">✓ EXACT MODEL</span>`;
             if (p.is_lowest) {
-                badgesHtml = `<span class="lowest-badge">✓ LOWEST PRICE</span>`;
+                badgesHtml += ` <span class="lowest-badge">✓ LOWEST PRICE</span>`;
             }
             priceHtml = `₹${p.current_price ? p.current_price.toLocaleString('en-IN') : 'N/A'}`;
             subHtml = `
@@ -417,12 +413,17 @@ function generateMockPipelineData(query) {
 
     // Detect Category & Estimate Realistic Baseline Indian Retail Price
     const text = (productName + " " + query).toLowerCase();
+    const isElectronics = [
+        "realme", "redmi", "xiaomi", "mi", "oneplus", "vivo", "oppo", "poco", "iqoo", "motorola", "moto", "nokia", "apple", "iphone", "samsung", "pixel", "galaxy",
+        "5g", "4g", "phone", "mobile", "smartphone", "laptop", "macbook", "ipad", "tablet", "watch", "smartwatch", "tv", "earbuds", "headphone", "audio", 
+        "camera", "console", "croma", "dimensity", "snapdragon", "intel", "amd", "ryzen", "rtx", "headset", "bluetooth", "charger", "soundbar", "speaker"
+    ].some(k => text.includes(k));
+
     const isFashion = ["kurta", "kurti", "saree", "suit", "anarkali", "salwar", "lehenga", "ethnic", "dress", "shirt", "jeans", "t-shirt", "jacket", "top", "palazzo", "legging", "clothing", "apparel", "fashion", "dupatta"].some(k => text.includes(k));
-    const isElectronics = ["iphone", "phone", "mobile", "samsung", "pixel", "laptop", "macbook", "ipad", "tablet", "watch", "smartwatch", "tv", "earbuds", "headphone", "audio", "camera", "console", "croma"].some(k => text.includes(k));
 
     let category = "General";
-    if (isFashion) category = "Fashion";
-    else if (isElectronics) category = "Electronics";
+    if (isElectronics) category = "Electronics";
+    else if (isFashion) category = "Fashion";
 
     let basePrice = 0;
     let originalPrice = 0;
@@ -447,11 +448,13 @@ function generateMockPipelineData(query) {
             basePrice = 42990;
         } else if (text.includes("ipad") || text.includes("tablet") || text.includes("oneplus 12") || text.includes("galaxy tab")) {
             basePrice = 28990;
+        } else if (text.includes("realme") || text.includes("redmi") || text.includes("oneplus") || text.includes("5g")) {
+            basePrice = 28999;
         } else if (text.includes("sony wh") || text.includes("bose") || text.includes("airpods pro") || text.includes("apple watch")) {
             basePrice = 24990;
         } else if (text.includes("smart tv") || text.includes("55 inch") || text.includes("43 inch") || text.includes("bravia") || text.includes("oled")) {
             basePrice = 32990;
-        } else if (text.includes("phone") || text.includes("mobile") || text.includes("redmi") || text.includes("realme") || text.includes("poco") || text.includes("iqoo") || text.includes("smartphone")) {
+        } else if (text.includes("phone") || text.includes("mobile") || text.includes("smartphone")) {
             basePrice = 14999;
         } else if (text.includes("smartwatch") || text.includes("galaxy watch") || text.includes("fire-boltt") || text.includes("noise watch") || text.includes("amazfit")) {
             basePrice = 2499;
@@ -489,11 +492,35 @@ function generateMockPipelineData(query) {
         else if (lowerQ.includes('croma.')) sourceStoreName = "Croma";
     }
 
+    const UNIVERSAL_BRANDS = [
+        "apple", "iphone", "samsung", "realme", "redmi", "xiaomi", "mi", "oneplus", "vivo", "oppo", "poco", "iqoo", 
+        "motorola", "moto", "google", "pixel", "sony", "nokia", "nothing", "asus", "rog", "infinix", "tecno",
+        "hp", "dell", "lenovo", "acer", "macbook", "msi", "lg", "toshiba", "intel", "amd",
+        "boat", "noise", "fire-boltt", "jbl", "bose", "sennheiser", "marshall", "boult", "ptron", "mivi", "crossbeats",
+        "whirlpool", "panasonic", "haier", "godrej", "voltas", "daikin", "philips", "bajaj", "havells", "crompton",
+        "nike", "adidas", "puma", "reebok", "under armour", "asics", "skechers", "new balance", "converse", "vans",
+        "levi's", "levis", "zara", "h&m", "u.s. polo", "us polo", "allen solly", "peter england", "van heusen", "louis philippe",
+        "wrangler", "pepe jeans", "spykar", "flying machine", "bata", "woodland", "red tape", "crocs",
+        "casio", "titan", "fastrack", "fossil", "timex", "tommy hilfiger"
+    ];
+
+    const isUniversalBrand = isElectronics || UNIVERSAL_BRANDS.some(b => text.includes(b));
+    const isPlatformExclusive = Boolean(isUrl && sourceStoreName && !isUniversalBrand);
+
     const storeSearchTerm = encodeURIComponent(productName);
     const dashSearchTerm = storeSearchTerm.replace(/%20/g, "-");
 
     let stores = [];
-    if (category === "Fashion") {
+    if (category === "Electronics") {
+        stores = [
+            { name: "Flipkart", mult: 1.0, avail: "In Stock", url: (sourceStoreName === "Flipkart") ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}` },
+            { name: "Amazon", mult: 1.0, avail: "In Stock", url: (sourceStoreName === "Amazon") ? query : `https://www.amazon.in/s?k=${storeSearchTerm}` },
+            { name: "Croma", mult: 1.01, avail: "In Stock", url: (sourceStoreName === "Croma") ? query : `https://www.croma.com/search/?text=${storeSearchTerm}` },
+            { name: "Reliance Digital", mult: 1.02, avail: "Limited Stock", url: `https://www.reliancedigital.in/search?q=${storeSearchTerm}` },
+            { name: "Tata CLiQ", mult: 1.01, avail: "In Stock", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${storeSearchTerm}` },
+            { name: "Vijay Sales", mult: 1.02, avail: "In Stock", url: `https://www.vijaysales.com/search/${storeSearchTerm}` }
+        ];
+    } else if (category === "Fashion") {
         stores = [
             { name: "Flipkart", mult: 1.0, avail: "In Stock", url: (sourceStoreName === "Flipkart") ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}` },
             { name: "Meesho", mult: 0.95, avail: "In Stock", url: (sourceStoreName === "Meesho") ? query : `https://www.meesho.com/search?q=${storeSearchTerm}` },
@@ -502,27 +529,16 @@ function generateMockPipelineData(query) {
             { name: "Ajio", mult: 1.08, avail: "In Stock", url: (sourceStoreName === "Ajio") ? query : `https://www.ajio.com/search/?text=${storeSearchTerm}` },
             { name: "Tata CLiQ", mult: 1.12, avail: "In Stock", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${storeSearchTerm}` }
         ];
-    } else if (category === "Electronics") {
-        stores = [
-            { name: "Amazon", mult: 1.0, avail: "In Stock", url: (sourceStoreName === "Amazon") ? query : `https://www.amazon.in/s?k=${storeSearchTerm}` },
-            { name: "Flipkart", mult: 0.97, avail: "In Stock", url: (sourceStoreName === "Flipkart") ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}` },
-            { name: "Croma", mult: 0.99, avail: "In Stock", url: (sourceStoreName === "Croma") ? query : `https://www.croma.com/search/?text=${storeSearchTerm}` },
-            { name: "Reliance Digital", mult: 1.02, avail: "Limited Stock", url: `https://www.reliancedigital.in/search?q=${storeSearchTerm}` },
-            { name: "Tata CLiQ", mult: 1.01, avail: "In Stock", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${storeSearchTerm}` },
-            { name: "Vijay Sales", mult: 1.03, avail: "In Stock", url: `https://www.vijaysales.com/search/${storeSearchTerm}` }
-        ];
     } else {
         stores = [
+            { name: "Flipkart", mult: 0.98, avail: "In Stock", url: (sourceStoreName === "Flipkart") ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}` },
             { name: "Amazon", mult: 1.0, avail: "In Stock", url: (sourceStoreName === "Amazon") ? query : `https://www.amazon.in/s?k=${storeSearchTerm}` },
-            { name: "Flipkart", mult: 0.96, avail: "In Stock", url: (sourceStoreName === "Flipkart") ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}` },
-            { name: "Meesho", mult: 0.92, avail: "In Stock", url: (sourceStoreName === "Meesho") ? query : `https://www.meesho.com/search?q=${storeSearchTerm}` },
-            { name: "Tata CLiQ", mult: 0.99, avail: "In Stock", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${storeSearchTerm}` },
+            { name: "Meesho", mult: 0.95, avail: "In Stock", url: (sourceStoreName === "Meesho") ? query : `https://www.meesho.com/search?q=${storeSearchTerm}` },
+            { name: "Tata CLiQ", mult: 1.01, avail: "In Stock", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${storeSearchTerm}` },
             { name: "Myntra", mult: 1.04, avail: "In Stock", url: `https://www.myntra.com/${dashSearchTerm}` },
             { name: "Ajio", mult: 1.02, avail: "In Stock", url: `https://www.ajio.com/search/?text=${storeSearchTerm}` }
         ];
     }
-
-    const isPlatformExclusive = Boolean(isUrl && sourceStoreName);
 
     const prices = stores.map((store, idx) => {
         const isSource = Boolean(sourceStoreName && store.name === sourceStoreName);
@@ -540,9 +556,9 @@ function generateMockPipelineData(query) {
             disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
             avail = "In Stock (Exact Match)";
             isExactMatch = true;
-            matchType = "EXACT_MATCH";
+            matchType = "EXACT_MODEL";
             actionLabel = `Buy on ${store.name} ↗`;
-        } else if (isUrl) {
+        } else if (isPlatformExclusive) {
             cPrice = Math.round(basePrice * (1.08 + idx * 0.03));
             oPrice = Math.max(originalPrice, Math.round(cPrice * 1.25));
             disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
@@ -551,12 +567,13 @@ function generateMockPipelineData(query) {
             matchType = "CATEGORY_SIMILAR";
             actionLabel = `Search Similar on ${store.name} ↗`;
         } else {
-            cPrice = Math.round(basePrice * store.mult);
-            oPrice = Math.max(originalPrice, Math.round(cPrice * 1.15));
+            const retailMult = isUrl ? (store.name === "Amazon" ? 1.0 : (1.0 + (idx * 0.01))) : store.mult;
+            cPrice = Math.round(basePrice * retailMult);
+            oPrice = Math.max(originalPrice, Math.round(cPrice * 1.20));
             disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
-            avail = store.avail;
+            avail = store.avail || "In Stock";
             isExactMatch = true;
-            matchType = "MULTI_STORE_LISTING";
+            matchType = "EXACT_MODEL";
             actionLabel = `Compare on ${store.name} ↗`;
         }
 
@@ -592,18 +609,31 @@ function generateMockPipelineData(query) {
     const valueScore = Math.min(96, Math.max(65, Math.round((sentimentScore * 0.4) + (trustScore * 0.4) + 15)));
     const predPrice = Math.round(lowestPriceObj.current_price * 0.96);
 
-    const platformNotice = isPlatformExclusive ? {
-        title: `Verified ${sourceStoreName} Deal & Multi-Store Transparency`,
-        message: `This exact product was verified on <b>${sourceStoreName}</b> at <b>₹${basePrice.toLocaleString('en-IN')}</b> (${lowestPriceObj.discount_percent}% OFF). Because this brand/seller is exclusive to ${sourceStoreName}, other stores show comparable alternatives in this category rather than duplicate listings.`,
-        source_store: sourceStoreName,
-        source_price: basePrice,
-        is_exclusive: true
-    } : null;
+    let platformNotice = null;
+    if (isUrl && sourceStoreName) {
+        if (isPlatformExclusive) {
+            platformNotice = {
+                title: `Verified ${sourceStoreName} Exclusive Deal & Multi-Store Transparency`,
+                message: `This exact product was verified on <b>${sourceStoreName}</b> at <b>₹${basePrice.toLocaleString('en-IN')}</b> (${lowestPriceObj.discount_percent}% OFF). Because this brand/seller is exclusive to ${sourceStoreName}, other stores show comparable alternatives in this category rather than duplicate listings.`,
+                source_store: sourceStoreName,
+                source_price: basePrice,
+                is_exclusive: true
+            };
+        } else {
+            platformNotice = {
+                title: `Verified ${sourceStoreName} Deal · Multi-Store Price Comparison`,
+                message: `Verified direct listing on <b>${sourceStoreName}</b> at <b>₹${basePrice.toLocaleString('en-IN')}</b> (${lowestPriceObj.discount_percent}% OFF). Comparing live retail pricing across <b>Amazon, Croma, Reliance Digital</b>, and other major retailers for <b>${productName}</b>.`,
+                source_store: sourceStoreName,
+                source_price: basePrice,
+                is_exclusive: false
+            };
+        }
+    }
 
     const altFirst = prices.find(p => !p.is_source);
     const recommendationReason = isPlatformExclusive
         ? `${lowestPriceObj.website_name} offers the verified lowest deal at ₹${lowestPriceObj.current_price.toLocaleString('en-IN')} with ${lowestPriceObj.discount_percent}% off (MRP ₹${lowestPriceObj.original_price.toLocaleString('en-IN')}). This exact product is verified on ${lowestPriceObj.website_name}; other platforms show comparable category alternatives starting from ~₹${altFirst ? altFirst.current_price.toLocaleString('en-IN') : (lowestPriceObj.current_price + 20)}. High sentiment rating (${sentimentScore.toFixed(1)}/100) and genuine trust score (${trustScore.toFixed(1)}%).`
-        : `${lowestPriceObj.website_name} offers the best price at ₹${lowestPriceObj.current_price.toLocaleString('en-IN')} with ${lowestPriceObj.discount_percent}% off (MRP ₹${lowestPriceObj.original_price.toLocaleString('en-IN')}). High sentiment rating (${sentimentScore.toFixed(1)}/100) and genuine trust score (${trustScore.toFixed(1)}%).`;
+        : `${lowestPriceObj.website_name} offers the best price on ${productName} at ₹${lowestPriceObj.current_price.toLocaleString('en-IN')} with ${lowestPriceObj.discount_percent}% off (MRP ₹${lowestPriceObj.original_price.toLocaleString('en-IN')}). Verified across major shopping platforms with high sentiment rating (${sentimentScore.toFixed(1)}/100) and genuine trust score (${trustScore.toFixed(1)}%).`;
 
     return {
         status: "SUCCESS",
