@@ -206,37 +206,104 @@ function renderDashboard(data) {
     const priceContainer = document.getElementById("priceContainer");
     priceContainer.innerHTML = "";
 
+    const platformNoticeBox = document.getElementById("platformNoticeBox");
     const isInputUrl = Boolean(searchInput && searchInput.value && (searchInput.value.trim().startsWith("http://") || searchInput.value.trim().startsWith("https://") || searchInput.value.trim().startsWith("www.")));
+    const sourceStore = prices.find(p => p.is_source);
+
+    // Solution A Transparency Notice
+    if (platformNoticeBox) {
+        if (data.platform_notice) {
+            platformNoticeBox.innerHTML = `
+                <div class="notice-icon">🏷️</div>
+                <div class="notice-content">
+                    <strong>${data.platform_notice.title || 'Verified Platform Deal & Category Comparison'}</strong>
+                    <p>${data.platform_notice.message}</p>
+                </div>
+                <div class="notice-tag">✓ Verified Source</div>
+            `;
+            platformNoticeBox.style.display = "flex";
+        } else if (isInputUrl && sourceStore) {
+            platformNoticeBox.innerHTML = `
+                <div class="notice-icon">🏷️</div>
+                <div class="notice-content">
+                    <strong>Verified ${sourceStore.website_name} Deal & Multi-Store Transparency</strong>
+                    <p>This exact product was verified on <b>${sourceStore.website_name}</b> at <b>₹${sourceStore.current_price.toLocaleString('en-IN')}</b> (${sourceStore.discount_percent}% OFF). Because this brand/seller is exclusive to ${sourceStore.website_name}, other stores show comparable alternatives in this category rather than duplicate listings.</p>
+                </div>
+                <div class="notice-tag">✓ Verified Source</div>
+            `;
+            platformNoticeBox.style.display = "flex";
+        } else {
+            platformNoticeBox.style.display = "none";
+        }
+    }
 
     prices.forEach(p => {
         const card = document.createElement("div");
-        card.className = `price-card ${p.is_lowest ? 'lowest-store' : ''}`;
-        
-        const isVerifiedSource = Boolean(p.is_source || (isInputUrl && p.is_lowest));
-        const badgeHtml = p.is_lowest
-            ? (isVerifiedSource ? '<span class="lowest-badge verified-badge">✓ VERIFIED BEST DEAL</span>' : '<span class="lowest-badge">✓ LOWEST PRICE</span>')
-            : '';
+        const isVerifiedSource = Boolean(p.is_source || (p.is_exact_match === true && isInputUrl && p.is_lowest));
+        card.className = `price-card ${p.is_lowest ? 'lowest-store' : ''} ${isVerifiedSource ? 'verified-exact-card' : ''}`;
 
-        const btnText = isVerifiedSource ? `Buy on ${p.website_name} ↗` : `Compare on ${p.website_name} ↗`;
+        let badgesHtml = '';
+        let priceHtml = '';
+        let subHtml = '';
+        let btnText = '';
+        let btnClass = '';
+        let availClass = 'availability';
+        let availText = `● ${p.availability || 'In Stock'}`;
+
+        if (isVerifiedSource) {
+            badgesHtml = `<span class="match-badge exact-badge">✓ EXACT VERIFIED PRODUCT</span>`;
+            if (p.is_lowest) {
+                badgesHtml += ` <span class="lowest-badge verified-badge">✓ BEST VERIFIED DEAL</span>`;
+            }
+            priceHtml = `₹${p.current_price ? p.current_price.toLocaleString('en-IN') : 'N/A'}`;
+            subHtml = `
+                ${p.original_price ? `<span class="original-price">₹${p.original_price.toLocaleString('en-IN')}</span>` : ''}
+                ${p.discount_percent ? `<span class="discount-badge">${p.discount_percent}% OFF</span>` : ''}
+            `;
+            availClass = "availability verified-stock";
+            availText = "● In Stock (Exact Match)";
+            btnText = p.action_label || `Buy on ${p.website_name} ↗`;
+            btnClass = "visit-store-btn direct-deal-btn";
+        } else if (isInputUrl) {
+            badgesHtml = `<span class="match-badge similar-badge">🔍 SIMILAR IN CATEGORY</span>`;
+            priceHtml = `<span class="est-prefix">Est. from</span> ₹${p.current_price ? p.current_price.toLocaleString('en-IN') : 'N/A'}`;
+            subHtml = `<span class="category-avg-tag">Category Market Alternative</span>`;
+            availClass = "availability similar-stock";
+            availText = "● Comparable Items in Stock";
+            btnText = p.action_label || `Search Similar on ${p.website_name} ↗`;
+            btnClass = "visit-store-btn similar-search-btn";
+        } else {
+            if (p.is_lowest) {
+                badgesHtml = `<span class="lowest-badge">✓ LOWEST PRICE</span>`;
+            }
+            priceHtml = `₹${p.current_price ? p.current_price.toLocaleString('en-IN') : 'N/A'}`;
+            subHtml = `
+                ${p.original_price ? `<span class="original-price">₹${p.original_price.toLocaleString('en-IN')}</span>` : ''}
+                ${p.discount_percent ? `<span class="discount-badge">${p.discount_percent}% OFF</span>` : ''}
+            `;
+            availClass = "availability";
+            availText = `● ${p.availability || 'In Stock'}`;
+            btnText = p.action_label || `Compare on ${p.website_name} ↗`;
+            btnClass = p.is_lowest ? "visit-store-btn direct-deal-btn" : "visit-store-btn";
+        }
 
         card.innerHTML = `
             <div class="store-header">
                 <span class="store-name">${p.website_name}</span>
-                ${badgeHtml}
+                <div class="store-badges">${badgesHtml}</div>
             </div>
             
             <div class="store-price-main">
-                ₹${p.current_price ? p.current_price.toLocaleString('en-IN') : 'N/A'}
+                ${priceHtml}
             </div>
             
             <div class="store-price-sub">
-                ${p.original_price ? `<span class="original-price">₹${p.original_price.toLocaleString('en-IN')}</span>` : ''}
-                ${p.discount_percent ? `<span class="discount-badge">${p.discount_percent}% OFF</span>` : ''}
+                ${subHtml}
             </div>
             
-            <span class="availability">● ${p.availability || 'In Stock'}</span>
+            <span class="${availClass}">${availText}</span>
             
-            <a href="${p.product_url || '#'}" target="_blank" rel="noopener noreferrer" class="visit-store-btn ${isVerifiedSource ? 'direct-deal-btn' : ''}">
+            <a href="${p.product_url || '#'}" target="_blank" rel="noopener noreferrer" class="${btnClass}">
                 ${btnText}
             </a>
         `;
@@ -411,9 +478,16 @@ function generateMockPipelineData(query) {
         originalPrice = (basePrice <= 300) ? 1599 : Math.round(basePrice * 1.35);
     }
 
-    const isSourceAmazon = isUrl && query.includes("amazon");
-    const isSourceFlipkart = isUrl && query.includes("flipkart");
-    const isSourceMeesho = isUrl && query.includes("meesho");
+    let sourceStoreName = null;
+    if (isUrl) {
+        const lowerQ = query.toLowerCase();
+        if (lowerQ.includes('flipkart.')) sourceStoreName = "Flipkart";
+        else if (lowerQ.includes('amazon.')) sourceStoreName = "Amazon";
+        else if (lowerQ.includes('meesho.')) sourceStoreName = "Meesho";
+        else if (lowerQ.includes('myntra.')) sourceStoreName = "Myntra";
+        else if (lowerQ.includes('ajio.')) sourceStoreName = "Ajio";
+        else if (lowerQ.includes('croma.')) sourceStoreName = "Croma";
+    }
 
     const storeSearchTerm = encodeURIComponent(productName);
     const dashSearchTerm = storeSearchTerm.replace(/%20/g, "-");
@@ -421,49 +495,71 @@ function generateMockPipelineData(query) {
     let stores = [];
     if (category === "Fashion") {
         stores = [
-            { name: "Flipkart", mult: 1.0, avail: "In Stock", url: isSourceFlipkart ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}` },
-            { name: "Meesho", mult: 0.95, avail: "In Stock", url: isSourceMeesho ? query : `https://www.meesho.com/search?q=${storeSearchTerm}` },
-            { name: "Amazon", mult: 1.05, avail: "In Stock", url: isSourceAmazon ? query : `https://www.amazon.in/s?k=${storeSearchTerm}` },
-            { name: "Myntra", mult: 1.10, avail: "In Stock", url: `https://www.myntra.com/${dashSearchTerm}` },
-            { name: "Ajio", mult: 1.08, avail: "In Stock", url: `https://www.ajio.com/search/?text=${storeSearchTerm}` },
+            { name: "Flipkart", mult: 1.0, avail: "In Stock", url: (sourceStoreName === "Flipkart") ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}` },
+            { name: "Meesho", mult: 0.95, avail: "In Stock", url: (sourceStoreName === "Meesho") ? query : `https://www.meesho.com/search?q=${storeSearchTerm}` },
+            { name: "Amazon", mult: 1.05, avail: "In Stock", url: (sourceStoreName === "Amazon") ? query : `https://www.amazon.in/s?k=${storeSearchTerm}` },
+            { name: "Myntra", mult: 1.10, avail: "In Stock", url: (sourceStoreName === "Myntra") ? query : `https://www.myntra.com/${dashSearchTerm}` },
+            { name: "Ajio", mult: 1.08, avail: "In Stock", url: (sourceStoreName === "Ajio") ? query : `https://www.ajio.com/search/?text=${storeSearchTerm}` },
             { name: "Tata CLiQ", mult: 1.12, avail: "In Stock", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${storeSearchTerm}` }
         ];
     } else if (category === "Electronics") {
         stores = [
-            { name: "Amazon", mult: 1.0, avail: "In Stock", url: isSourceAmazon ? query : `https://www.amazon.in/s?k=${storeSearchTerm}` },
-            { name: "Flipkart", mult: 0.97, avail: "In Stock", url: isSourceFlipkart ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}` },
-            { name: "Croma", mult: 0.99, avail: "In Stock", url: `https://www.croma.com/search/?text=${storeSearchTerm}` },
+            { name: "Amazon", mult: 1.0, avail: "In Stock", url: (sourceStoreName === "Amazon") ? query : `https://www.amazon.in/s?k=${storeSearchTerm}` },
+            { name: "Flipkart", mult: 0.97, avail: "In Stock", url: (sourceStoreName === "Flipkart") ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}` },
+            { name: "Croma", mult: 0.99, avail: "In Stock", url: (sourceStoreName === "Croma") ? query : `https://www.croma.com/search/?text=${storeSearchTerm}` },
             { name: "Reliance Digital", mult: 1.02, avail: "Limited Stock", url: `https://www.reliancedigital.in/search?q=${storeSearchTerm}` },
             { name: "Tata CLiQ", mult: 1.01, avail: "In Stock", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${storeSearchTerm}` },
             { name: "Vijay Sales", mult: 1.03, avail: "In Stock", url: `https://www.vijaysales.com/search/${storeSearchTerm}` }
         ];
     } else {
         stores = [
-            { name: "Amazon", mult: 1.0, avail: "In Stock", url: isSourceAmazon ? query : `https://www.amazon.in/s?k=${storeSearchTerm}` },
-            { name: "Flipkart", mult: 0.96, avail: "In Stock", url: isSourceFlipkart ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}` },
-            { name: "Meesho", mult: 0.92, avail: "In Stock", url: isSourceMeesho ? query : `https://www.meesho.com/search?q=${storeSearchTerm}` },
+            { name: "Amazon", mult: 1.0, avail: "In Stock", url: (sourceStoreName === "Amazon") ? query : `https://www.amazon.in/s?k=${storeSearchTerm}` },
+            { name: "Flipkart", mult: 0.96, avail: "In Stock", url: (sourceStoreName === "Flipkart") ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}` },
+            { name: "Meesho", mult: 0.92, avail: "In Stock", url: (sourceStoreName === "Meesho") ? query : `https://www.meesho.com/search?q=${storeSearchTerm}` },
             { name: "Tata CLiQ", mult: 0.99, avail: "In Stock", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${storeSearchTerm}` },
             { name: "Myntra", mult: 1.04, avail: "In Stock", url: `https://www.myntra.com/${dashSearchTerm}` },
             { name: "Ajio", mult: 1.02, avail: "In Stock", url: `https://www.ajio.com/search/?text=${storeSearchTerm}` }
         ];
     }
 
+    const isPlatformExclusive = Boolean(isUrl && sourceStoreName);
+
     const prices = stores.map((store, idx) => {
-        const isSource = (isSourceFlipkart && store.name === "Flipkart") || (isSourceAmazon && store.name === "Amazon") || (isSourceMeesho && store.name === "Meesho");
+        const isSource = Boolean(sourceStoreName && store.name === sourceStoreName);
         let cPrice;
-        let avail = store.avail;
+        let oPrice;
+        let disc;
+        let avail;
+        let isExactMatch;
+        let matchType;
+        let actionLabel;
+
         if (isSource) {
             cPrice = basePrice;
-            avail = "In Stock (Verified Deal)";
+            oPrice = Math.max(originalPrice, Math.round(cPrice * 1.15));
+            disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+            avail = "In Stock (Exact Match)";
+            isExactMatch = true;
+            matchType = "EXACT_MATCH";
+            actionLabel = `Buy on ${store.name} ↗`;
         } else if (isUrl) {
-            // Competitor shopping alternatives carry realistic retail comparison pricing above the verified deal
-            cPrice = Math.round(basePrice * (1.05 + idx * 0.03));
-            avail = "In Stock";
+            cPrice = Math.round(basePrice * (1.08 + idx * 0.03));
+            oPrice = Math.max(originalPrice, Math.round(cPrice * 1.25));
+            disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+            avail = "Comparable Items in Stock";
+            isExactMatch = false;
+            matchType = "CATEGORY_SIMILAR";
+            actionLabel = `Search Similar on ${store.name} ↗`;
         } else {
             cPrice = Math.round(basePrice * store.mult);
+            oPrice = Math.max(originalPrice, Math.round(cPrice * 1.15));
+            disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+            avail = store.avail;
+            isExactMatch = true;
+            matchType = "MULTI_STORE_LISTING";
+            actionLabel = `Compare on ${store.name} ↗`;
         }
-        const oPrice = Math.max(originalPrice, Math.round(cPrice * 1.15));
-        const disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+
         return {
             website_name: store.name,
             current_price: cPrice,
@@ -472,12 +568,22 @@ function generateMockPipelineData(query) {
             availability: avail,
             product_url: store.url,
             is_lowest: false,
-            is_source: isSource
+            is_source: isSource,
+            is_exact_match: isExactMatch,
+            match_type: matchType,
+            action_label: actionLabel
         };
     });
 
     let lowestPriceObj = prices.find(p => p.is_source) || prices.reduce((prev, curr) => (prev.current_price < curr.current_price ? prev : curr));
     prices.forEach(p => p.is_lowest = (p.website_name === lowestPriceObj.website_name));
+
+    // Place verified source store first
+    prices.sort((a, b) => {
+        if (a.is_source) return -1;
+        if (b.is_source) return 1;
+        return a.current_price - b.current_price;
+    });
 
     let hash = 0;
     for (let i = 0; i < text.length; i++) hash += text.charCodeAt(i);
@@ -486,8 +592,31 @@ function generateMockPipelineData(query) {
     const valueScore = Math.min(96, Math.max(65, Math.round((sentimentScore * 0.4) + (trustScore * 0.4) + 15)));
     const predPrice = Math.round(lowestPriceObj.current_price * 0.96);
 
+    const platformNotice = isPlatformExclusive ? {
+        title: `Verified ${sourceStoreName} Deal & Multi-Store Transparency`,
+        message: `This exact product was verified on <b>${sourceStoreName}</b> at <b>₹${basePrice.toLocaleString('en-IN')}</b> (${lowestPriceObj.discount_percent}% OFF). Because this brand/seller is exclusive to ${sourceStoreName}, other stores show comparable alternatives in this category rather than duplicate listings.`,
+        source_store: sourceStoreName,
+        source_price: basePrice,
+        is_exclusive: true
+    } : null;
+
+    const altFirst = prices.find(p => !p.is_source);
+    const recommendationReason = isPlatformExclusive
+        ? `${lowestPriceObj.website_name} offers the verified lowest deal at ₹${lowestPriceObj.current_price.toLocaleString('en-IN')} with ${lowestPriceObj.discount_percent}% off (MRP ₹${lowestPriceObj.original_price.toLocaleString('en-IN')}). This exact product is verified on ${lowestPriceObj.website_name}; other platforms show comparable category alternatives starting from ~₹${altFirst ? altFirst.current_price.toLocaleString('en-IN') : (lowestPriceObj.current_price + 20)}. High sentiment rating (${sentimentScore.toFixed(1)}/100) and genuine trust score (${trustScore.toFixed(1)}%).`
+        : `${lowestPriceObj.website_name} offers the best price at ₹${lowestPriceObj.current_price.toLocaleString('en-IN')} with ${lowestPriceObj.discount_percent}% off (MRP ₹${lowestPriceObj.original_price.toLocaleString('en-IN')}). High sentiment rating (${sentimentScore.toFixed(1)}/100) and genuine trust score (${trustScore.toFixed(1)}%).`;
+
     return {
         status: "SUCCESS",
+        platform_notice: platformNotice,
+        procedure_steps: [
+            { step: 1, name: "Input Processing", status: "Completed", details: `Parsed ${isUrl ? "URL" : "Product"}: ${query}` },
+            { step: 2, name: "Multi-Store Data Collection", status: "Completed", details: isPlatformExclusive ? `Verified deal on ${sourceStoreName} (₹${basePrice.toLocaleString('en-IN')}) & comparable items across ${prices.length} platforms` : `Collected real prices across ${prices.length} platforms` },
+            { step: 3, name: "Sentiment AI Analysis", status: "Completed", details: `${sentimentScore.toFixed(1)}/100 Positive Customer Sentiment` },
+            { step: 4, name: "Fake Review ML Model", status: "Completed", details: `${trustScore.toFixed(1)}% Genuine Review Trust Score` },
+            { step: 5, name: "Price History Snapshot", status: "Completed", details: `Best verified deal: ₹${lowestPriceObj.current_price.toLocaleString('en-IN')} on ${lowestPriceObj.website_name}` },
+            { step: 6, name: "Future Price Prediction", status: "Completed", details: `Predicted ₹${predPrice.toLocaleString('en-IN')} in 7 days (FALLING)` },
+            { step: 7, name: "AI Recommendation", status: "Completed", details: `Decision: BUY NOW on ${lowestPriceObj.website_name} (${isPlatformExclusive ? "Verified Exact Match" : "Best Price"})` }
+        ],
         product: {
             product_id: 101,
             product_name: productName,
@@ -533,7 +662,7 @@ function generateMockPipelineData(query) {
             buy_decision: "BUY NOW",
             best_website: lowestPriceObj.website_name,
             recommended_price: lowestPriceObj.current_price,
-            recommendation_reason: `${lowestPriceObj.website_name} offers the best price at ₹${lowestPriceObj.current_price.toLocaleString('en-IN')}. High sentiment rating (${sentimentScore.toFixed(1)}/100) and genuine trust score (${trustScore.toFixed(1)}%).`
+            recommendation_reason: recommendationReason
         }
     };
 }

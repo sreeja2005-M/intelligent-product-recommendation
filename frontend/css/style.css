@@ -1693,6 +1693,136 @@ footer > p {
     transform: translateY(-1px);
 }
 
+/* ================= SOLUTION A: PLATFORM NOTICE & MATCH BADGES ================= */
+
+.platform-notice-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 18px 22px;
+    margin-bottom: 25px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85));
+    border: 1px solid rgba(139, 92, 246, 0.35);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    position: relative;
+    overflow: hidden;
+}
+
+.platform-notice-box::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: linear-gradient(to bottom, #8b5cf6, #34d399);
+}
+
+.notice-icon {
+    font-size: 24px;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.notice-content {
+    flex: 1;
+}
+
+.notice-content strong {
+    display: block;
+    font-size: 14px;
+    color: #f1f5f9;
+    margin-bottom: 5px;
+    letter-spacing: 0.2px;
+}
+
+.notice-content p {
+    font-size: 13px;
+    color: #94a3b8;
+    line-height: 1.6;
+    margin: 0;
+}
+
+.notice-content b {
+    color: #a78bfa;
+}
+
+.notice-tag {
+    align-self: center;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: rgba(52, 211, 153, 0.12);
+    border: 1px solid rgba(52, 211, 153, 0.3);
+    color: #34d399;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* Match badges for store cards */
+.match-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    padding: 3px 7px;
+    border-radius: 5px;
+}
+
+.match-badge.exact-badge {
+    background: rgba(34, 197, 94, 0.16);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.match-badge.similar-badge {
+    background: rgba(148, 163, 184, 0.12);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.est-prefix {
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: 500;
+    margin-right: 4px;
+}
+
+.category-avg-tag {
+    font-size: 10px;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.availability.verified-stock {
+    color: #34d399;
+    font-weight: 600;
+}
+
+.availability.similar-stock {
+    color: #94a3b8;
+}
+
+.visit-store-btn.similar-search-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+}
+
+.visit-store-btn.similar-search-btn:hover {
+    background: rgba(139, 92, 246, 0.18);
+    border-color: rgba(139, 92, 246, 0.4);
+    color: #ffffff;
+}
+
+.price-card.verified-exact-card {
+    border-color: rgba(52, 211, 153, 0.4);
+    background: rgba(52, 211, 153, 0.04);
+    box-shadow: 0 10px 30px rgba(52, 211, 153, 0.08);
+}
+
 
 /* ================= DASHBOARD ANALYTICS GRID ================= */
 
