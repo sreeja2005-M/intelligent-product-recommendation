@@ -1,8 +1,15 @@
 # Netlify Configuration File
-# Serves static frontend from the 'frontend' directory
+# Serves static frontend from the 'frontend' directory and serverless functions
 
 [build]
   publish = "frontend"
+  functions = "netlify/functions"
+
+# API Route redirect to serverless Netlify function
+[[redirects]]
+  from = "/api/analyze-full"
+  to = "/.netlify/functions/analyze"
+  status = 200
 
 # SPA / Static route fallback
 [[redirects]]

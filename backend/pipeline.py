@@ -6,6 +6,21 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 
 
+def detect_product_category(product_name: str, query: str) -> str:
+    text = (product_name + " " + query).lower()
+    if any(k in text for k in ["kurta", "kurti", "saree", "suit", "anarkali", "salwar", "lehenga", "ethnic", "dress", "shirt", "jeans", "t-shirt", "jacket", "top", "palazzo", "legging", "clothing", "apparel", "fashion", "dupatta"]):
+        return "Fashion"
+    elif any(k in text for k in ["iphone", "phone", "mobile", "samsung", "pixel", "laptop", "macbook", "ipad", "tablet", "watch", "smartwatch", "tv", "earbuds", "headphone", "audio", "camera", "console", "croma"]):
+        return "Electronics"
+    elif any(k in text for k in ["shoe", "sneaker", "boot", "sandal", "footwear", "nike", "adidas", "puma", "crocs"]):
+        return "Footwear"
+    elif any(k in text for k in ["bag", "backpack", "trolley", "luggage", "wallet", "purse", "suitcase"]):
+        return "Bags & Luggage"
+    elif any(k in text for k in ["beauty", "lipstick", "perfume", "skincare", "cream", "serum", "makeup"]):
+        return "Beauty & Personal Care"
+    return "General"
+
+
 def estimate_realistic_base_price(product_name: str, query: str) -> float:
     text = (product_name + " " + query).lower()
     
@@ -39,11 +54,13 @@ def estimate_realistic_base_price(product_name: str, query: str) -> float:
         return 1199.0
     elif any(k in text for k in ["shoe", "sneaker", "nike", "adidas", "puma"]):
         return 2999.0
-    elif any(k in text for k in ["shirt", "jeans", "t-shirt", "jacket", "dress", "saree", "kurti"]):
-        return 799.0
+    elif any(k in text for k in ["kurta", "kurti", "saree", "suit", "anarkali", "salwar", "lehenga", "ethnic"]):
+        return 249.0
+    elif any(k in text for k in ["shirt", "jeans", "t-shirt", "jacket", "dress", "top"]):
+        return 499.0
     else:
         hash_val = sum(ord(c) for c in text)
-        return float(1299 + ((hash_val * 47) % 2500))
+        return float(399 + ((hash_val * 31) % 500))
 
 
 from backend.database import SessionLocal
@@ -136,7 +153,8 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
 
     product_name = scraped_data.product_name if scraped_data and scraped_data.product_name else query.title()
     brand = scraped_data.brand if scraped_data and scraped_data.brand else "Multi-Brand"
-    category = scraped_data.category if scraped_data and scraped_data.category else "Electronics"
+    detected_cat = detect_product_category(product_name, query)
+    category = detected_cat if (not scraped_data or not scraped_data.category or scraped_data.category in ["Electronics", "Multi-Brand"]) else scraped_data.category
 
     # Search existing DB or create new product
     product = db.query(Product).filter(Product.product_name.ilike(f"%{product_name}%")).first()
@@ -152,6 +170,12 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         db.add(product)
         db.commit()
         db.refresh(product)
+    else:
+        # Update category and image if fresh data available
+        product.category = category
+        if scraped_data and scraped_data.image_url:
+            product.image_url = scraped_data.image_url
+        db.commit()
 
     # Establish baseline price with category-aware price estimator fallback
     if scraped_data and scraped_data.current_price and float(scraped_data.current_price) > 0:
@@ -163,31 +187,50 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
     db.query(ProductPrice).filter(ProductPrice.product_id == product.product_id).delete()
 
     encoded_name = quote_plus(product_name)
+    dash_name = encoded_name.replace('+', '-')
 
-    stores = [
-        {"name": "Amazon", "url": query if "amazon." in domain else f"https://www.amazon.in/s?k={encoded_name}", "mult": 1.0, "orig_mult": 1.25, "avail": "In Stock"},
-        {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={encoded_name}", "mult": 0.96, "orig_mult": 1.25, "avail": "In Stock"},
-        {"name": "Meesho", "url": query if "meesho." in domain else f"https://www.meesho.com/search?q={encoded_name}", "mult": 0.90, "orig_mult": 1.35, "avail": "In Stock"},
-        {"name": "Croma", "url": query if "croma." in domain else f"https://www.croma.com/search/?text={encoded_name}", "mult": 0.98, "orig_mult": 1.20, "avail": "In Stock"},
-        {"name": "Reliance Digital", "url": f"https://www.reliancedigital.in/search?q={encoded_name}", "mult": 1.02, "orig_mult": 1.28, "avail": "Limited Stock"},
-        {"name": "Tata CLiQ", "url": f"https://www.tatacliq.com/search/?searchCategory=all&text={encoded_name}", "mult": 0.99, "orig_mult": 1.22, "avail": "In Stock"}
-    ]
+    if category == "Fashion":
+        stores = [
+            {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={encoded_name}", "mult": 1.0, "avail": "In Stock"},
+            {"name": "Meesho", "url": query if "meesho." in domain else f"https://www.meesho.com/search?q={encoded_name}", "mult": 0.95, "avail": "In Stock"},
+            {"name": "Amazon", "url": query if "amazon." in domain else f"https://www.amazon.in/s?k={encoded_name}", "mult": 1.05, "avail": "In Stock"},
+            {"name": "Myntra", "url": query if "myntra." in domain else f"https://www.myntra.com/{dash_name}", "mult": 1.10, "avail": "In Stock"},
+            {"name": "Ajio", "url": query if "ajio." in domain else f"https://www.ajio.com/search/?text={encoded_name}", "mult": 1.08, "avail": "In Stock"},
+            {"name": "Tata CLiQ", "url": query if "tatacliq." in domain else f"https://www.tatacliq.com/search/?searchCategory=all&text={encoded_name}", "mult": 1.12, "avail": "In Stock"}
+        ]
+    elif category == "Electronics":
+        stores = [
+            {"name": "Amazon", "url": query if "amazon." in domain else f"https://www.amazon.in/s?k={encoded_name}", "mult": 1.0, "avail": "In Stock"},
+            {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={encoded_name}", "mult": 0.97, "avail": "In Stock"},
+            {"name": "Croma", "url": query if "croma." in domain else f"https://www.croma.com/search/?text={encoded_name}", "mult": 0.99, "avail": "In Stock"},
+            {"name": "Reliance Digital", "url": query if "reliancedigital." in domain else f"https://www.reliancedigital.in/search?q={encoded_name}", "mult": 1.02, "avail": "Limited Stock"},
+            {"name": "Tata CLiQ", "url": query if "tatacliq." in domain else f"https://www.tatacliq.com/search/?searchCategory=all&text={encoded_name}", "mult": 1.01, "avail": "In Stock"},
+            {"name": "Vijay Sales", "url": f"https://www.vijaysales.com/search/{encoded_name}", "mult": 1.03, "avail": "In Stock"}
+        ]
+    else:
+        stores = [
+            {"name": "Amazon", "url": query if "amazon." in domain else f"https://www.amazon.in/s?k={encoded_name}", "mult": 1.0, "avail": "In Stock"},
+            {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={encoded_name}", "mult": 0.96, "avail": "In Stock"},
+            {"name": "Meesho", "url": query if "meesho." in domain else f"https://www.meesho.com/search?q={encoded_name}", "mult": 0.92, "avail": "In Stock"},
+            {"name": "Tata CLiQ", "url": query if "tatacliq." in domain else f"https://www.tatacliq.com/search/?searchCategory=all&text={encoded_name}", "mult": 0.99, "avail": "In Stock"},
+            {"name": "Myntra", "url": f"https://www.myntra.com/{dash_name}", "mult": 1.04, "avail": "In Stock"},
+            {"name": "Ajio", "url": f"https://www.ajio.com/search/?text={encoded_name}", "mult": 1.02, "avail": "In Stock"}
+        ]
 
     price_entries = []
     scraped_site = scraped_data.website.lower() if scraped_data else ""
     scraped_price = base_price
+    source_mrp = float(scraped_data.original_price) if (scraped_data and scraped_data.original_price and float(scraped_data.original_price) > scraped_price) else round(scraped_price * 1.35, 2)
 
     for idx, store in enumerate(stores):
         is_source_store = (scraped_site and scraped_site in store["name"].lower())
         if is_source_store:
             c_price = scraped_price
-            o_price = float(scraped_data.original_price) if (scraped_data and scraped_data.original_price) else round(c_price * 1.35, 2)
+            o_price = source_mrp
             disc = float(scraped_data.discount_percent) if (scraped_data and scraped_data.discount_percent) else round(((o_price - c_price) / o_price) * 100, 1)
         else:
-            # Other stores carry a comparative markup relative to the source store
-            markup = (1.08 + (idx * 0.04)) if scraped_site else store["mult"]
-            c_price = round(scraped_price * markup, 2)
-            o_price = round(c_price * store["orig_mult"], 2)
+            c_price = round(scraped_price * store["mult"], 2)
+            o_price = max(source_mrp, round(c_price * 1.15, 2))
             disc = round(((o_price - c_price) / o_price) * 100, 1)
 
         price_obj = ProductPrice(
