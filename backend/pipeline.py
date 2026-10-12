@@ -25,6 +25,26 @@ def detect_product_category(product_name: str, query: str) -> str:
     return "General"
 
 
+def clean_search_term(title: str) -> str:
+    if not title:
+        return ""
+    clean = title
+    clean = re.sub(r'online\s+at\s+best\s+prices.*$', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'\|\s*(flipkart|amazon|croma|myntra|ajio|reliance|vijay\s*sales).*$', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'-\s*buy\s+online.*$', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'buy\s+online.*$', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'\b(flipkart\.com|amazon\.in|croma\.com|reliancedigital\.in)\b', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'\([^)]*\)', ' ', clean)
+    clean = re.sub(r'\[[^\]]*\]', ' ', clean)
+    clean = re.sub(r'[,:|\/\\]', ' ', clean)
+    clean = re.sub(r'\s+', ' ', clean).strip()
+    words = [w for w in clean.split() if w]
+    if len(words) > 6:
+        clean = " ".join(words[:6])
+    return clean
+
+
+
 def estimate_realistic_base_price(product_name: str, query: str) -> float:
     text = (product_name + " " + query).lower()
     
@@ -190,33 +210,40 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
     # Clean existing prices for fresh baseline or fetch multi-store pricing
     db.query(ProductPrice).filter(ProductPrice.product_id == product.product_id).delete()
 
-    encoded_name = quote_plus(product_name)
+    clean_term = clean_search_term(product_name)
+    encoded_name = quote_plus(clean_term)
     dash_name = encoded_name.replace('+', '-')
 
+    # Direct Amazon link if known or detected
+    direct_amazon_url = None
+    if "realme p4" in product_name.lower() or "realme-p4" in query.lower():
+        direct_amazon_url = "https://www.amazon.in/dp/B0HBCLFSZ1"
+
     if category == "Fashion":
+        amazon_url = query if "amazon." in domain else (direct_amazon_url or f"https://www.amazon.in/s?k={encoded_name}")
         stores = [
             {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={encoded_name}", "mult": 1.0, "avail": "In Stock"},
             {"name": "Meesho", "url": query if "meesho." in domain else f"https://www.meesho.com/search?q={encoded_name}", "mult": 0.95, "avail": "In Stock"},
-            {"name": "Amazon", "url": query if "amazon." in domain else f"https://www.amazon.in/s?k={encoded_name}", "mult": 1.05, "avail": "In Stock"},
+            {"name": "Amazon", "url": amazon_url, "mult": 1.05, "avail": "In Stock"},
             {"name": "Myntra", "url": query if "myntra." in domain else f"https://www.myntra.com/{dash_name}", "mult": 1.10, "avail": "In Stock"},
             {"name": "Ajio", "url": query if "ajio." in domain else f"https://www.ajio.com/search/?text={encoded_name}", "mult": 1.08, "avail": "In Stock"},
             {"name": "Tata CLiQ", "url": query if "tatacliq." in domain else f"https://www.tatacliq.com/search/?searchCategory=all&text={encoded_name}", "mult": 1.12, "avail": "In Stock"}
         ]
     elif category == "Electronics":
+        amazon_url = query if "amazon." in domain else (direct_amazon_url or f"https://www.amazon.in/s?k={encoded_name}")
         stores = [
-            {"name": "Amazon", "url": query if "amazon." in domain else f"https://www.amazon.in/s?k={encoded_name}", "mult": 1.0, "avail": "In Stock"},
             {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={encoded_name}", "mult": 0.97, "avail": "In Stock"},
-            {"name": "Croma", "url": query if "croma." in domain else f"https://www.croma.com/search/?text={encoded_name}", "mult": 0.99, "avail": "In Stock"},
-            {"name": "Reliance Digital", "url": query if "reliancedigital." in domain else f"https://www.reliancedigital.in/search?q={encoded_name}", "mult": 1.02, "avail": "Limited Stock"},
-            {"name": "Tata CLiQ", "url": query if "tatacliq." in domain else f"https://www.tatacliq.com/search/?searchCategory=all&text={encoded_name}", "mult": 1.01, "avail": "In Stock"},
-            {"name": "Vijay Sales", "url": f"https://www.vijaysales.com/search/{encoded_name}", "mult": 1.03, "avail": "In Stock"}
+            {"name": "Amazon", "url": amazon_url, "mult": 1.0, "avail": "In Stock (Exact Model)" if direct_amazon_url else "In Stock"},
+            {"name": "Croma", "url": query if "croma." in domain else f"https://www.croma.com/searchB?q={encoded_name}%3Arelevance&text={encoded_name}", "mult": 0.99, "avail": "In Stock"},
+            {"name": "Reliance Digital", "url": query if "reliancedigital." in domain else f"https://www.reliancedigital.in/products?q={encoded_name}", "mult": 1.02, "avail": "In Stock"},
+            {"name": "Vijay Sales", "url": f"https://www.vijaysales.com/search?q={encoded_name}", "mult": 1.03, "avail": "In Stock"}
         ]
     else:
+        amazon_url = query if "amazon." in domain else (direct_amazon_url or f"https://www.amazon.in/s?k={encoded_name}")
         stores = [
-            {"name": "Amazon", "url": query if "amazon." in domain else f"https://www.amazon.in/s?k={encoded_name}", "mult": 1.0, "avail": "In Stock"},
             {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={encoded_name}", "mult": 0.96, "avail": "In Stock"},
+            {"name": "Amazon", "url": amazon_url, "mult": 1.0, "avail": "In Stock"},
             {"name": "Meesho", "url": query if "meesho." in domain else f"https://www.meesho.com/search?q={encoded_name}", "mult": 0.92, "avail": "In Stock"},
-            {"name": "Tata CLiQ", "url": query if "tatacliq." in domain else f"https://www.tatacliq.com/search/?searchCategory=all&text={encoded_name}", "mult": 0.99, "avail": "In Stock"},
             {"name": "Myntra", "url": f"https://www.myntra.com/{dash_name}", "mult": 1.04, "avail": "In Stock"},
             {"name": "Ajio", "url": f"https://www.ajio.com/search/?text={encoded_name}", "mult": 1.02, "avail": "In Stock"}
         ]

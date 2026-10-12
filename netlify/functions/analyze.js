@@ -43,6 +43,70 @@ function fetchPage(targetUrl) {
     });
 }
 
+function cleanSearchTerm(title) {
+    if (!title) return '';
+    let clean = title;
+    clean = clean.replace(/online\s+at\s+best\s+prices.*$/i, '');
+    clean = clean.replace(/\|\s*(flipkart|amazon|croma|myntra|ajio|reliance|vijay\s*sales).*$/i, '');
+    clean = clean.replace(/-\s*buy\s+online.*$/i, '');
+    clean = clean.replace(/buy\s+online.*$/i, '');
+    clean = clean.replace(/\b(flipkart\.com|amazon\.in|croma\.com|reliancedigital\.in)\b/gi, '');
+    clean = clean.replace(/\([^)]*\)/g, ' ');
+    clean = clean.replace(/\[[^\]]*\]/g, ' ');
+    clean = clean.replace(/[,:|\/\\]/g, ' ');
+    clean = clean.replace(/\s+/g, ' ').trim();
+    const words = clean.split(' ').filter(Boolean);
+    if (words.length > 6) {
+        clean = words.slice(0, 6).join(' ');
+    }
+    return clean;
+}
+
+function findAmazonDirectProduct(query) {
+    return new Promise((resolve) => {
+        try {
+            const clean = cleanSearchTerm(query);
+            if (!clean) return resolve(null);
+            const searchUrl = 'https://www.amazon.in/s?k=' + encodeURIComponent(clean);
+            const req = https.get(searchUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                },
+                timeout: 4000
+            }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    const linkMatches = [...data.matchAll(/href="(\/[^"]*\/dp\/(B[A-Z0-9]{9})[^"]*)"/g)];
+                    for (const m of linkMatches) {
+                        const asin = m[2];
+                        if (asin && asin.length === 10) {
+                            return resolve({
+                                asin: asin,
+                                url: `https://www.amazon.in/dp/${asin}`
+                            });
+                        }
+                    }
+                    const asinMatch = data.match(/data-asin="(B[A-Z0-9]{9})"/);
+                    if (asinMatch && asinMatch[1]) {
+                        return resolve({
+                            asin: asinMatch[1],
+                            url: `https://www.amazon.in/dp/${asinMatch[1]}`
+                        });
+                    }
+                    resolve(null);
+                });
+            });
+            req.on('error', () => resolve(null));
+            req.on('timeout', () => { req.destroy(); resolve(null); });
+        } catch (e) {
+            resolve(null);
+        }
+    });
+}
+
 function extractProductInfo(html, url) {
     let productName = null;
     let currentPrice = null;
@@ -223,8 +287,9 @@ exports.handler = async function (event, context) {
         originalPrice = (basePrice <= 300) ? 1599 : Math.round(basePrice * 1.35);
     }
 
-    const encodedName = encodeURIComponent(productName);
-    const dashName = encodedName.replace(/%20/g, '-');
+    const cleanTerm = cleanSearchTerm(productName);
+    const encodedClean = encodeURIComponent(cleanTerm);
+    const dashClean = encodedClean.replace(/%20/g, '-');
 
     const lowerTarget = targetUrl.toLowerCase();
     const isSourceFlipkart = isUrl && lowerTarget.includes('flipkart');
@@ -260,33 +325,51 @@ exports.handler = async function (event, context) {
     // Exclusive only if user provided a URL for a non-universal boutique/private-label seller (e.g. Leezaa kurta)
     const isPlatformExclusive = Boolean(isUrl && sourceStoreName && !isUniversalBrand);
 
+    // Try resolving direct Amazon product page when not already on Amazon
+    let amazonDirectProduct = null;
+    if (!isSourceAmazon && (category === "Electronics" || isUniversalBrand)) {
+        try {
+            amazonDirectProduct = await findAmazonDirectProduct(cleanTerm);
+        } catch (e) {}
+    }
+
     let stores = [];
     if (category === "Electronics") {
+        const amazonUrl = isSourceAmazon 
+            ? targetUrl 
+            : (amazonDirectProduct ? amazonDirectProduct.url : `https://www.amazon.in/s?k=${encodedClean}`);
+
         stores = [
-            { name: "Flipkart", url: isSourceFlipkart ? targetUrl : `https://www.flipkart.com/search?q=${encodedName}`, mult: 1.0, avail: "In Stock" },
-            { name: "Amazon", url: isSourceAmazon ? targetUrl : `https://www.amazon.in/s?k=${encodedName}`, mult: 1.0, avail: "In Stock" },
-            { name: "Croma", url: isSourceCroma ? targetUrl : `https://www.croma.com/search/?text=${encodedName}`, mult: 1.01, avail: "In Stock" },
-            { name: "Reliance Digital", url: `https://www.reliancedigital.in/search?q=${encodedName}`, mult: 1.02, avail: "Limited Stock" },
-            { name: "Tata CLiQ", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodedName}`, mult: 1.01, avail: "In Stock" },
-            { name: "Vijay Sales", url: `https://www.vijaysales.com/search/${encodedName}`, mult: 1.02, avail: "In Stock" }
+            { name: "Flipkart", url: isSourceFlipkart ? targetUrl : `https://www.flipkart.com/search?q=${encodedClean}`, mult: 1.0, avail: "In Stock" },
+            { name: "Amazon", url: amazonUrl, mult: 1.0, avail: amazonDirectProduct ? "In Stock (Exact Model)" : "In Stock", isDirectResolved: Boolean(amazonDirectProduct) },
+            { name: "Croma", url: isSourceCroma ? targetUrl : `https://www.croma.com/searchB?q=${encodedClean}%3Arelevance&text=${encodedClean}`, mult: 1.01, avail: "In Stock" },
+            { name: "Reliance Digital", url: `https://www.reliancedigital.in/products?q=${encodedClean}`, mult: 1.02, avail: "In Stock" },
+            { name: "Vijay Sales", url: `https://www.vijaysales.com/search?q=${encodedClean}`, mult: 1.02, avail: "In Stock" }
         ];
     } else if (category === "Fashion") {
+        const amazonUrl = isSourceAmazon 
+            ? targetUrl 
+            : (amazonDirectProduct ? amazonDirectProduct.url : `https://www.amazon.in/s?k=${encodedClean}`);
+
         stores = [
-            { name: "Flipkart", url: isSourceFlipkart ? targetUrl : `https://www.flipkart.com/search?q=${encodedName}`, mult: 1.0, avail: "In Stock" },
-            { name: "Meesho", url: isSourceMeesho ? targetUrl : `https://www.meesho.com/search?q=${encodedName}`, mult: 0.95, avail: "In Stock" },
-            { name: "Amazon", url: isSourceAmazon ? targetUrl : `https://www.amazon.in/s?k=${encodedName}`, mult: 1.05, avail: "In Stock" },
-            { name: "Myntra", url: isSourceMyntra ? targetUrl : `https://www.myntra.com/${dashName}`, mult: 1.10, avail: "In Stock" },
-            { name: "Ajio", url: isSourceAjio ? targetUrl : `https://www.ajio.com/search/?text=${encodedName}`, mult: 1.08, avail: "In Stock" },
-            { name: "Tata CLiQ", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodedName}`, mult: 1.12, avail: "In Stock" }
+            { name: "Flipkart", url: isSourceFlipkart ? targetUrl : `https://www.flipkart.com/search?q=${encodedClean}`, mult: 1.0, avail: "In Stock" },
+            { name: "Meesho", url: isSourceMeesho ? targetUrl : `https://www.meesho.com/search?q=${encodedClean}`, mult: 0.95, avail: "In Stock" },
+            { name: "Amazon", url: amazonUrl, mult: 1.05, avail: "In Stock" },
+            { name: "Myntra", url: isSourceMyntra ? targetUrl : `https://www.myntra.com/${dashClean}`, mult: 1.10, avail: "In Stock" },
+            { name: "Ajio", url: isSourceAjio ? targetUrl : `https://www.ajio.com/search/?text=${encodedClean}`, mult: 1.08, avail: "In Stock" },
+            { name: "Tata CLiQ", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodedClean}`, mult: 1.12, avail: "In Stock" }
         ];
     } else {
+        const amazonUrl = isSourceAmazon 
+            ? targetUrl 
+            : (amazonDirectProduct ? amazonDirectProduct.url : `https://www.amazon.in/s?k=${encodedClean}`);
+
         stores = [
-            { name: "Flipkart", url: isSourceFlipkart ? targetUrl : `https://www.flipkart.com/search?q=${encodedName}`, mult: 0.98, avail: "In Stock" },
-            { name: "Amazon", url: isSourceAmazon ? targetUrl : `https://www.amazon.in/s?k=${encodedName}`, mult: 1.0, avail: "In Stock" },
-            { name: "Meesho", url: isSourceMeesho ? targetUrl : `https://www.meesho.com/search?q=${encodedName}`, mult: 0.95, avail: "In Stock" },
-            { name: "Tata CLiQ", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodedName}`, mult: 1.01, avail: "In Stock" },
-            { name: "Myntra", url: `https://www.myntra.com/${dashName}`, mult: 1.04, avail: "In Stock" },
-            { name: "Ajio", url: `https://www.ajio.com/search/?text=${encodedName}`, mult: 1.02, avail: "In Stock" }
+            { name: "Flipkart", url: isSourceFlipkart ? targetUrl : `https://www.flipkart.com/search?q=${encodedClean}`, mult: 0.98, avail: "In Stock" },
+            { name: "Amazon", url: amazonUrl, mult: 1.0, avail: "In Stock" },
+            { name: "Meesho", url: isSourceMeesho ? targetUrl : `https://www.meesho.com/search?q=${encodedClean}`, mult: 0.95, avail: "In Stock" },
+            { name: "Myntra", url: `https://www.myntra.com/${dashClean}`, mult: 1.04, avail: "In Stock" },
+            { name: "Ajio", url: `https://www.ajio.com/search/?text=${encodedClean}`, mult: 1.02, avail: "In Stock" }
         ];
     }
 
@@ -308,6 +391,16 @@ exports.handler = async function (event, context) {
             isExactMatch = true;
             matchType = "EXACT_MODEL";
             actionLabel = `Buy on ${s.name} ↗`;
+        } else if (s.name === "Amazon" && amazonDirectProduct) {
+            // Direct resolved model on Amazon
+            const retailMult = isUrl ? 1.0 : s.mult;
+            cPrice = Math.round(basePrice * retailMult);
+            oPrice = Math.max(originalPrice, Math.round(cPrice * 1.20));
+            disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+            avail = "In Stock (Exact Model)";
+            isExactMatch = true;
+            matchType = "EXACT_MODEL";
+            actionLabel = `Buy on Amazon ↗`;
         } else if (isPlatformExclusive) {
             // Boutique / unbranded seller: competitor stores show category alternatives
             cPrice = Math.round(basePrice * (1.08 + idx * 0.03));
