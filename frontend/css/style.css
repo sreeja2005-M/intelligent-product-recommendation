@@ -1777,6 +1777,12 @@ footer > p {
     border: 1px solid rgba(34, 197, 94, 0.35);
 }
 
+.match-badge.search-badge {
+    background: rgba(56, 189, 248, 0.14);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+}
+
 .match-badge.similar-badge {
     background: rgba(148, 163, 184, 0.12);
     color: #94a3b8;

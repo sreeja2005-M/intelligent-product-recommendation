@@ -243,12 +243,12 @@ function renderDashboard(data) {
         let availClass = 'availability';
         let availText = `● ${p.availability || 'In Stock'}`;
 
-        if (isVerifiedSource) {
-            badgesHtml = `<span class="match-badge exact-badge">✓ EXACT MODEL</span>`;
+        const isDirect = Boolean(p.is_source || p.is_exact_match || p.match_type === "EXACT_MODEL");
+
+        if (p.is_source) {
+            badgesHtml = `<span class="match-badge exact-badge">✓ EXACT MODEL</span> <span class="lowest-badge" style="background:rgba(100, 116, 139, 0.4);border:1px solid rgba(148, 163, 184, 0.5);color:#cbd5e1;">SOURCE LINK</span>`;
             if (p.is_lowest) {
-                badgesHtml += ` <span class="lowest-badge verified-badge">✓ BEST VERIFIED DEAL</span>`;
-            } else if (p.is_source) {
-                badgesHtml += ` <span class="lowest-badge" style="background:rgba(100, 116, 139, 0.4);border:1px solid rgba(148, 163, 184, 0.5);color:#cbd5e1;">SOURCE LINK</span>`;
+                badgesHtml += ` <span class="lowest-badge verified-badge">✓ BEST DEAL</span>`;
             }
             priceHtml = `₹${p.current_price ? p.current_price.toLocaleString('en-IN') : 'N/A'}`;
             subHtml = `
@@ -256,11 +256,10 @@ function renderDashboard(data) {
                 ${p.discount_percent ? `<span class="discount-badge">${p.discount_percent}% OFF</span>` : ''}
             `;
             availClass = "availability verified-stock";
-            availText = "● In Stock (Exact Match)";
+            availText = "● In Stock (Your Link)";
             btnText = p.action_label || `Buy on ${p.website_name} ↗`;
             btnClass = "visit-store-btn direct-deal-btn";
-        } else if (isPlatformExclusive) {
-            // Boutique / unbranded seller: competitor stores show category alternatives
+        } else if (isPlatformExclusive || p.match_type === "CATEGORY_SIMILAR") {
             badgesHtml = `<span class="match-badge similar-badge">🔍 SIMILAR IN CATEGORY</span>`;
             priceHtml = `<span class="est-prefix">Est. from</span> ₹${p.current_price ? p.current_price.toLocaleString('en-IN') : 'N/A'}`;
             subHtml = `<span class="category-avg-tag">Category Market Alternative</span>`;
@@ -268,8 +267,7 @@ function renderDashboard(data) {
             availText = "● Comparable Items in Stock";
             btnText = p.action_label || `Search Similar on ${p.website_name} ↗`;
             btnClass = "visit-store-btn similar-search-btn";
-        } else {
-            // Universal multi-store products (e.g. Realme P4 Pro, iPhone 15, boAt earbuds) or keyword searches
+        } else if (isDirect) {
             badgesHtml = `<span class="match-badge exact-badge">✓ EXACT MODEL</span>`;
             if (p.is_lowest) {
                 badgesHtml += ` <span class="lowest-badge">✓ LOWEST PRICE</span>`;
@@ -279,9 +277,23 @@ function renderDashboard(data) {
                 ${p.original_price ? `<span class="original-price">₹${p.original_price.toLocaleString('en-IN')}</span>` : ''}
                 ${p.discount_percent ? `<span class="discount-badge">${p.discount_percent}% OFF</span>` : ''}
             `;
+            availClass = "availability verified-stock";
+            availText = `● ${p.availability || 'In Stock (Exact Model)'}`;
+            btnText = p.action_label || `Buy on ${p.website_name} ↗`;
+            btnClass = p.is_lowest ? "visit-store-btn direct-deal-btn" : "visit-store-btn";
+        } else {
+            badgesHtml = `<span class="match-badge search-badge">🔍 LIVE STORE SEARCH</span>`;
+            if (p.is_lowest) {
+                badgesHtml += ` <span class="lowest-badge">✓ LOWEST PRICE</span>`;
+            }
+            priceHtml = `₹${p.current_price ? p.current_price.toLocaleString('en-IN') : 'N/A'}`;
+            subHtml = `
+                ${p.original_price ? `<span class="original-price">₹${p.original_price.toLocaleString('en-IN')}</span>` : ''}
+                ${p.discount_percent ? `<span class="discount-badge">${p.discount_percent}% OFF</span>` : ''}
+            `;
             availClass = "availability";
-            availText = `● ${p.availability || 'In Stock'}`;
-            btnText = p.action_label || `Compare on ${p.website_name} ↗`;
+            availText = `● ${p.availability || 'Available in Search'}`;
+            btnText = p.action_label || `Search on ${p.website_name} ↗`;
             btnClass = p.is_lowest ? "visit-store-btn direct-deal-btn" : "visit-store-btn";
         }
 
@@ -372,20 +384,72 @@ function renderDashboard(data) {
 function cleanSearchTerm(title) {
     if (!title) return '';
     let clean = title;
+    try { clean = decodeURIComponent(clean); } catch (e) {}
+    clean = clean.split('?')[0].split('#')[0];
+    if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('www.')) {
+        try {
+            const urlObj = new URL(clean.startsWith('www.') ? 'https://' + clean : clean);
+            const pathParts = urlObj.pathname.split('/').filter(p => p && p.length > 2 && !['p', 'dp', 'gp', 'product', 'itm', 'search'].includes(p.toLowerCase()));
+            if (pathParts.length > 0) {
+                clean = pathParts[0].replace(/[-_]/g, ' ');
+            }
+        } catch (e) {}
+    }
     clean = clean.replace(/online\s+at\s+best\s+prices.*$/i, '');
-    clean = clean.replace(/\|\s*(flipkart|amazon|croma|myntra|ajio|reliance|vijay\s*sales).*$/i, '');
+    clean = clean.replace(/\|\s*(flipkart|amazon|croma|myntra|ajio|reliance|vijay\s*sales|meesho|tata\s*cliq).*$/i, '');
     clean = clean.replace(/-\s*buy\s+online.*$/i, '');
     clean = clean.replace(/buy\s+online.*$/i, '');
-    clean = clean.replace(/\b(flipkart\.com|amazon\.in|croma\.com|reliancedigital\.in)\b/gi, '');
-    clean = clean.replace(/\([^)]*\)/g, ' ');
-    clean = clean.replace(/\[[^\]]*\]/g, ' ');
-    clean = clean.replace(/[,:|\/\\]/g, ' ');
+    clean = clean.replace(/\b(flipkart\.com|amazon\.in|croma\.com|reliancedigital\.in|tatacliq\.com|myntra\.com|ajio\.com|meesho\.com)\b/gi, '');
+    clean = clean.replace(/\b(with\s+camera\s+control|camera\s+control|works\s+with|built\s+for\s+apple\s+intelligence)\b.*$/i, '');
+    clean = clean.replace(/:\s*5G\s+Mobile\s+Phone.*$/i, '');
+    clean = clean.replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, ' ');
+    clean = clean.replace(/[,:;|\/\\_+]/g, ' ');
     clean = clean.replace(/\s+/g, ' ').trim();
-    const words = clean.split(' ').filter(Boolean);
-    if (words.length > 6) {
-        clean = words.slice(0, 6).join(' ');
+    const words = clean.split(' ').filter(w => w.length > 1 && !/^(with|for|and|the|buy|online|price|india|latest)$/i.test(w));
+    if (words.length > 5) {
+        clean = words.slice(0, 5).join(' ');
+    } else if (words.length > 0) {
+        clean = words.join(' ');
     }
-    return clean;
+    return clean || title;
+}
+
+function isDirectProductUrl(url) {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    if (lower.includes('/dp/') || lower.includes('/gp/product/')) return true;
+    if (lower.includes('/p/itm') || (lower.includes('flipkart.com') && lower.includes('/p/'))) return true;
+    if (lower.includes('croma.com') && lower.includes('/p/')) return true;
+    if (lower.includes('reliancedigital.in') && lower.includes('/p/')) return true;
+    if (lower.includes('vijaysales.com') && lower.includes('/p/')) return true;
+    if (lower.includes('myntra.com') && lower.match(/\/\d+\/buy/)) return true;
+    if (lower.includes('ajio.com') && lower.includes('/p/')) return true;
+    return false;
+}
+
+function getStoreSearchUrl(storeName, cleanTerm) {
+    const encoded = encodeURIComponent(cleanTerm);
+    const store = (storeName || '').toLowerCase();
+    if (store.includes('amazon')) {
+        return `https://www.amazon.in/s?k=${encoded}`;
+    } else if (store.includes('flipkart')) {
+        return `https://www.flipkart.com/search?q=${encoded}`;
+    } else if (store.includes('croma')) {
+        return `https://www.croma.com/searchB?q=${encoded}%3Arelevance&text=${encoded}`;
+    } else if (store.includes('reliance')) {
+        return `https://www.reliancedigital.in/products?q=${encoded}&page_no=1&page_size=12&page_type=number`;
+    } else if (store.includes('vijay')) {
+        return `https://www.vijaysales.com/search?q=${encoded}`;
+    } else if (store.includes('myntra')) {
+        return `https://www.myntra.com/search?q=${encoded}`;
+    } else if (store.includes('ajio')) {
+        return `https://www.ajio.com/search/?text=${encoded}`;
+    } else if (store.includes('tata')) {
+        return `https://www.tatacliq.com/search/?searchCategory=all&text=${encoded}`;
+    } else if (store.includes('meesho')) {
+        return `https://www.meesho.com/search?q=${encoded}`;
+    }
+    return `https://www.google.com/search?q=${encoded}`;
 }
 
 function generateMockPipelineData(query) {
@@ -551,11 +615,11 @@ function generateMockPipelineData(query) {
             category: "Electronics",
             mrp: 79900,
             stores: [
-                { name: "Croma", price: 69900, url: "https://www.croma.com/apple-iphone-16-128gb-black-/p/309621", avail: "In Stock (Exact Model)", action: "Buy on Croma ↗" },
-                { name: "Reliance Digital", price: 74900, url: "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20128gb", avail: "In Stock", action: "Compare on Reliance Digital ↗" },
-                { name: "Vijay Sales", price: 75900, url: "https://www.vijaysales.com/search?q=apple%20iphone%2016%20128gb", avail: "In Stock", action: "Compare on Vijay Sales ↗" },
-                { name: "Amazon", price: 76999, url: "https://www.amazon.in/dp/B0DGHZWBYB", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗" },
-                { name: "Flipkart", price: 79900, url: "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗" }
+                { name: "Croma", price: 69900, url: "https://www.croma.com/apple-iphone-16-128gb-black-/p/309621", avail: "In Stock (Exact Model)", action: "Buy on Croma ↗ (Exact Model)" },
+                { name: "Reliance Digital", price: 74900, url: "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20128gb&page_no=1&page_size=12&page_type=number", avail: "In Stock", action: "Search on Reliance Digital ↗" },
+                { name: "Vijay Sales", price: 75900, url: "https://www.vijaysales.com/search?q=apple%20iphone%2016%20128gb", avail: "In Stock", action: "Search on Vijay Sales ↗" },
+                { name: "Amazon", price: 76999, url: "https://www.amazon.in/dp/B0DGHZWBYB", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
+                { name: "Flipkart", price: 79900, url: "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" }
             ]
         },
         {
@@ -564,10 +628,10 @@ function generateMockPipelineData(query) {
             category: "Electronics",
             mrp: 89900,
             stores: [
-                { name: "Croma", price: 79900, url: "https://www.croma.com/searchB?q=apple%20iphone%2016%20plus%20128gb%3Arelevance&text=apple%20iphone%2016%20plus%20128gb", avail: "In Stock", action: "Buy on Croma ↗" },
-                { name: "Reliance Digital", price: 84900, url: "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20plus%20128gb", avail: "In Stock", action: "Compare on Reliance Digital ↗" },
-                { name: "Amazon", price: 85999, url: "https://www.amazon.in/s?k=apple+iphone+16+plus+128gb", avail: "In Stock", action: "Buy on Amazon ↗" },
-                { name: "Flipkart", price: 89900, url: "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗" }
+                { name: "Croma", price: 79900, url: "https://www.croma.com/searchB?q=apple%20iphone%2016%20plus%20128gb%3Arelevance&text=apple%20iphone%2016%20plus%20128gb", avail: "In Stock", action: "Search on Croma ↗" },
+                { name: "Reliance Digital", price: 84900, url: "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20plus%20128gb&page_no=1&page_size=12&page_type=number", avail: "In Stock", action: "Search on Reliance Digital ↗" },
+                { name: "Amazon", price: 85999, url: "https://www.amazon.in/s?k=apple+iphone+16+plus+128gb", avail: "In Stock", action: "Search on Amazon ↗" },
+                { name: "Flipkart", price: 89900, url: "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" }
             ]
         },
         {
@@ -576,10 +640,10 @@ function generateMockPipelineData(query) {
             category: "Electronics",
             mrp: 69900,
             stores: [
-                { name: "Flipkart", price: 57999, url: "https://www.flipkart.com/search?q=apple+iphone+15+128gb", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗" },
-                { name: "Amazon", price: 58999, url: "https://www.amazon.in/s?k=apple+iphone+15+128gb", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗" },
-                { name: "Croma", price: 59900, url: "https://www.croma.com/searchB?q=apple%20iphone%2015%20128gb%3Arelevance&text=apple%20iphone%2015%20128gb", avail: "In Stock", action: "Compare on Croma ↗" },
-                { name: "Reliance Digital", price: 61900, url: "https://www.reliancedigital.in/products?q=apple%20iphone%2015%20128gb", avail: "In Stock", action: "Compare on Reliance Digital ↗" }
+                { name: "Flipkart", price: 57999, url: "https://www.flipkart.com/search?q=apple+iphone+15+128gb", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
+                { name: "Amazon", price: 58999, url: "https://www.amazon.in/s?k=apple+iphone+15+128gb", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
+                { name: "Croma", price: 59900, url: "https://www.croma.com/searchB?q=apple%20iphone%2015%20128gb%3Arelevance&text=apple%20iphone%2015%20128gb", avail: "In Stock", action: "Search on Croma ↗" },
+                { name: "Reliance Digital", price: 61900, url: "https://www.reliancedigital.in/products?q=apple%20iphone%2015%20128gb&page_no=1&page_size=12&page_type=number", avail: "In Stock", action: "Search on Reliance Digital ↗" }
             ]
         },
         {
@@ -588,9 +652,9 @@ function generateMockPipelineData(query) {
             category: "Electronics",
             mrp: 32999,
             stores: [
-                { name: "Flipkart", price: 30999, url: "https://www.flipkart.com/search?q=realme+p4+pro+5g", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗" },
-                { name: "Croma", price: 31499, url: "https://www.croma.com/searchB?q=realme+p4+pro%3Arelevance&text=realme+p4+pro", avail: "In Stock", action: "Compare on Croma ↗" },
-                { name: "Amazon", price: 31999, url: "https://www.amazon.in/dp/B0HBCLFSZ1", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗" }
+                { name: "Flipkart", price: 30999, url: "https://www.flipkart.com/search?q=realme+p4+pro+5g", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
+                { name: "Croma", price: 31499, url: "https://www.croma.com/searchB?q=realme+p4+pro%3Arelevance&text=realme+p4+pro", avail: "In Stock", action: "Search on Croma ↗" },
+                { name: "Amazon", price: 31999, url: "https://www.amazon.in/dp/B0HBCLFSZ1", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" }
             ]
         }
     ];
@@ -608,6 +672,8 @@ function generateMockPipelineData(query) {
             const cPrice = isSource ? basePrice : s.price;
             const oPrice = benchmark.mrp;
             const disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+            const isDirect = Boolean(isSource || isDirectProductUrl(s.url));
+            let action = isSource ? `Buy on ${s.name} ↗ (Your Link)` : (s.action || (isDirect ? `Buy on ${s.name} ↗ (Exact Model)` : `Search on ${s.name} ↗`));
             return {
                 website_name: s.name,
                 current_price: cPrice,
@@ -617,9 +683,9 @@ function generateMockPipelineData(query) {
                 product_url: isSource ? query : s.url,
                 is_lowest: false,
                 is_source: isSource,
-                is_exact_match: true,
-                match_type: "EXACT_MODEL",
-                action_label: isSource ? `Buy on ${s.name} ↗` : (s.action || `Buy on ${s.name} ↗`)
+                is_exact_match: isDirect,
+                match_type: isDirect ? "EXACT_MODEL" : "SEARCH_COMPARISON",
+                action_label: action
             };
         });
     } else {
@@ -628,41 +694,62 @@ function generateMockPipelineData(query) {
         if (category === "Electronics") {
             const amazonUrl = (sourceStoreName === "Amazon") 
                 ? query 
-                : `https://www.amazon.in/s?k=${storeSearchTerm}`;
+                : getStoreSearchUrl('Amazon', cleanTerm);
             const flipkartUrl = (sourceStoreName === "Flipkart")
                 ? query
-                : `https://www.flipkart.com/search?q=${storeSearchTerm}`;
+                : getStoreSearchUrl('Flipkart', cleanTerm);
+            const cromaUrl = (sourceStoreName === "Croma")
+                ? query
+                : getStoreSearchUrl('Croma', cleanTerm);
+            const relianceUrl = (sourceStoreName === "Reliance Digital")
+                ? query
+                : getStoreSearchUrl('Reliance Digital', cleanTerm);
+            const vijayUrl = (sourceStoreName === "Vijay Sales")
+                ? query
+                : getStoreSearchUrl('Vijay Sales', cleanTerm);
 
             stores = [
-                { name: "Croma", mult: 0.95, avail: "In Stock", url: (sourceStoreName === "Croma") ? query : `https://www.croma.com/searchB?q=${storeSearchTerm}%3Arelevance&text=${storeSearchTerm}` },
-                { name: "Reliance Digital", mult: 0.98, avail: "In Stock", url: `https://www.reliancedigital.in/products?q=${storeSearchTerm}` },
-                { name: "Vijay Sales", mult: 0.99, avail: "In Stock", url: `https://www.vijaysales.com/search?q=${storeSearchTerm}` },
+                { name: "Croma", mult: 0.99, avail: "In Stock", url: cromaUrl },
+                { name: "Reliance Digital", mult: 1.0, avail: "In Stock", url: relianceUrl },
+                { name: "Vijay Sales", mult: 1.01, avail: "In Stock", url: vijayUrl },
                 { name: "Amazon", mult: 1.0, avail: "In Stock", url: amazonUrl },
                 { name: "Flipkart", mult: 1.0, avail: "In Stock", url: flipkartUrl }
             ];
         } else if (category === "Fashion") {
-            const amazonUrl = (sourceStoreName === "Amazon") ? query : `https://www.amazon.in/s?k=${storeSearchTerm}`;
+            const flipkartUrl = (sourceStoreName === "Flipkart") ? query : getStoreSearchUrl('Flipkart', cleanTerm);
+            const amazonUrl = (sourceStoreName === "Amazon") ? query : getStoreSearchUrl('Amazon', cleanTerm);
+            const meeshoUrl = (sourceStoreName === "Meesho") ? query : getStoreSearchUrl('Meesho', cleanTerm);
+            const myntraUrl = (sourceStoreName === "Myntra") ? query : getStoreSearchUrl('Myntra', cleanTerm);
+            const ajioUrl = (sourceStoreName === "Ajio") ? query : getStoreSearchUrl('Ajio', cleanTerm);
+            const tataUrl = getStoreSearchUrl('Tata CLiQ', cleanTerm);
+
             stores = [
-                { name: "Flipkart", mult: 1.0, avail: "In Stock", url: (sourceStoreName === "Flipkart") ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}` },
-                { name: "Meesho", mult: 0.95, avail: "In Stock", url: (sourceStoreName === "Meesho") ? query : `https://www.meesho.com/search?q=${storeSearchTerm}` },
+                { name: "Flipkart", mult: 1.0, avail: "In Stock", url: flipkartUrl },
+                { name: "Meesho", mult: 0.95, avail: "In Stock", url: meeshoUrl },
                 { name: "Amazon", mult: 1.05, avail: "In Stock", url: amazonUrl },
-                { name: "Myntra", mult: 1.10, avail: "In Stock", url: (sourceStoreName === "Myntra") ? query : `https://www.myntra.com/${dashSearchTerm}` },
-                { name: "Ajio", mult: 1.08, avail: "In Stock", url: (sourceStoreName === "Ajio") ? query : `https://www.ajio.com/search/?text=${storeSearchTerm}` },
-                { name: "Tata CLiQ", mult: 1.12, avail: "In Stock", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${storeSearchTerm}` }
+                { name: "Myntra", mult: 1.10, avail: "In Stock", url: myntraUrl },
+                { name: "Ajio", mult: 1.08, avail: "In Stock", url: ajioUrl },
+                { name: "Tata CLiQ", mult: 1.12, avail: "In Stock", url: tataUrl }
             ];
         } else {
-            const amazonUrl = (sourceStoreName === "Amazon") ? query : `https://www.amazon.in/s?k=${storeSearchTerm}`;
+            const flipkartUrl = (sourceStoreName === "Flipkart") ? query : getStoreSearchUrl('Flipkart', cleanTerm);
+            const amazonUrl = (sourceStoreName === "Amazon") ? query : getStoreSearchUrl('Amazon', cleanTerm);
+            const meeshoUrl = (sourceStoreName === "Meesho") ? query : getStoreSearchUrl('Meesho', cleanTerm);
+            const myntraUrl = (sourceStoreName === "Myntra") ? query : getStoreSearchUrl('Myntra', cleanTerm);
+            const ajioUrl = (sourceStoreName === "Ajio") ? query : getStoreSearchUrl('Ajio', cleanTerm);
+
             stores = [
-                { name: "Flipkart", mult: 0.98, avail: "In Stock", url: (sourceStoreName === "Flipkart") ? query : `https://www.flipkart.com/search?q=${storeSearchTerm}` },
+                { name: "Flipkart", mult: 0.98, avail: "In Stock", url: flipkartUrl },
                 { name: "Amazon", mult: 1.0, avail: "In Stock", url: amazonUrl },
-                { name: "Meesho", mult: 0.95, avail: "In Stock", url: (sourceStoreName === "Meesho") ? query : `https://www.meesho.com/search?q=${storeSearchTerm}` },
-                { name: "Myntra", mult: 1.04, avail: "In Stock", url: `https://www.myntra.com/${dashSearchTerm}` },
-                { name: "Ajio", mult: 1.02, avail: "In Stock", url: `https://www.ajio.com/search/?text=${storeSearchTerm}` }
+                { name: "Meesho", mult: 0.95, avail: "In Stock", url: meeshoUrl },
+                { name: "Myntra", mult: 1.04, avail: "In Stock", url: myntraUrl },
+                { name: "Ajio", mult: 1.02, avail: "In Stock", url: ajioUrl }
             ];
         }
 
         prices = stores.map((store, idx) => {
             const isSource = Boolean(sourceStoreName && store.name === sourceStoreName);
+            const isDirect = Boolean(isSource || isDirectProductUrl(store.url));
             let cPrice;
             let oPrice;
             let disc;
@@ -678,24 +765,31 @@ function generateMockPipelineData(query) {
                 avail = "In Stock (Exact Match)";
                 isExactMatch = true;
                 matchType = "EXACT_MODEL";
-                actionLabel = `Buy on ${store.name} ↗`;
+                actionLabel = `Buy on ${store.name} ↗ (Your Link)`;
             } else if (isPlatformExclusive) {
-                cPrice = Math.round(basePrice * (1.08 + idx * 0.03));
+                cPrice = Math.round((basePrice * (1.08 + idx * 0.03)) / 10) * 10;
                 oPrice = Math.max(originalPrice, Math.round(cPrice * 1.25));
                 disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
                 avail = "Comparable Items in Stock";
                 isExactMatch = false;
                 matchType = "CATEGORY_SIMILAR";
                 actionLabel = `Search Similar on ${store.name} ↗`;
-            } else {
-                const retailMult = store.mult || (1.0 + (idx * 0.01));
-                cPrice = Math.round(basePrice * retailMult);
-                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.20));
+            } else if (isDirect) {
+                cPrice = Math.round((basePrice * (store.mult || 1.0)) / 10) * 10;
+                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.18));
                 disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
-                avail = store.avail || "In Stock";
+                avail = "In Stock (Exact Model)";
                 isExactMatch = true;
                 matchType = "EXACT_MODEL";
-                actionLabel = `Compare on ${store.name} ↗`;
+                actionLabel = `Buy on ${store.name} ↗ (Exact Model)`;
+            } else {
+                cPrice = Math.round((basePrice * (store.mult || 1.0)) / 10) * 10;
+                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.18));
+                disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+                avail = "Available in Search";
+                isExactMatch = false;
+                matchType = "SEARCH_COMPARISON";
+                actionLabel = `Search on ${store.name} ↗`;
             }
 
             return {

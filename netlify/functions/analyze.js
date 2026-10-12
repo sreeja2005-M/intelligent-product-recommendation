@@ -60,23 +60,72 @@ function fetchPage(targetUrl) {
 function cleanSearchTerm(title) {
     if (!title) return '';
     let clean = title;
+    try { clean = decodeURIComponent(clean); } catch (e) {}
+    clean = clean.split('?')[0].split('#')[0];
+    if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('www.')) {
+        try {
+            const urlObj = new URL(clean.startsWith('www.') ? 'https://' + clean : clean);
+            const pathParts = urlObj.pathname.split('/').filter(p => p && p.length > 2 && !['p', 'dp', 'gp', 'product', 'itm', 'search'].includes(p.toLowerCase()));
+            if (pathParts.length > 0) {
+                clean = pathParts[0].replace(/[-_]/g, ' ');
+            }
+        } catch (e) {}
+    }
     clean = clean.replace(/online\s+at\s+best\s+prices.*$/i, '');
-    clean = clean.replace(/\|\s*(flipkart|amazon|croma|myntra|ajio|reliance|vijay\s*sales).*$/i, '');
+    clean = clean.replace(/\|\s*(flipkart|amazon|croma|myntra|ajio|reliance|vijay\s*sales|meesho|tata\s*cliq).*$/i, '');
     clean = clean.replace(/-\s*buy\s+online.*$/i, '');
     clean = clean.replace(/buy\s+online.*$/i, '');
-    clean = clean.replace(/\b(flipkart\.com|amazon\.in|croma\.com|reliancedigital\.in)\b/gi, '');
-    clean = clean.replace(/\bwith\s+camera\s+control\b.*$/i, '');
-    clean = clean.replace(/\bworks\s+with\b.*$/i, '');
+    clean = clean.replace(/\b(flipkart\.com|amazon\.in|croma\.com|reliancedigital\.in|tatacliq\.com|myntra\.com|ajio\.com|meesho\.com)\b/gi, '');
+    clean = clean.replace(/\b(with\s+camera\s+control|camera\s+control|works\s+with|built\s+for\s+apple\s+intelligence)\b.*$/i, '');
     clean = clean.replace(/:\s*5G\s+Mobile\s+Phone.*$/i, '');
-    clean = clean.replace(/\([^)]*\)/g, ' ');
-    clean = clean.replace(/\[[^\]]*\]/g, ' ');
-    clean = clean.replace(/[,:;|\/\\]/g, ' ');
+    clean = clean.replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, ' ');
+    clean = clean.replace(/[,:;|\/\\_+]/g, ' ');
     clean = clean.replace(/\s+/g, ' ').trim();
-    const words = clean.split(' ').filter(Boolean);
-    if (words.length > 6) {
-        clean = words.slice(0, 6).join(' ');
+    const words = clean.split(' ').filter(w => w.length > 1 && !/^(with|for|and|the|buy|online|price|india|latest)$/i.test(w));
+    if (words.length > 5) {
+        clean = words.slice(0, 5).join(' ');
+    } else if (words.length > 0) {
+        clean = words.join(' ');
     }
-    return clean;
+    return clean || title;
+}
+
+function isDirectProductUrl(url) {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    if (lower.includes('/dp/') || lower.includes('/gp/product/')) return true;
+    if (lower.includes('/p/itm') || (lower.includes('flipkart.com') && lower.includes('/p/'))) return true;
+    if (lower.includes('croma.com') && lower.includes('/p/')) return true;
+    if (lower.includes('reliancedigital.in') && lower.includes('/p/')) return true;
+    if (lower.includes('vijaysales.com') && lower.includes('/p/')) return true;
+    if (lower.includes('myntra.com') && lower.match(/\/\d+\/buy/)) return true;
+    if (lower.includes('ajio.com') && lower.includes('/p/')) return true;
+    return false;
+}
+
+function getStoreSearchUrl(storeName, cleanTerm) {
+    const encoded = encodeURIComponent(cleanTerm);
+    const store = (storeName || '').toLowerCase();
+    if (store.includes('amazon')) {
+        return `https://www.amazon.in/s?k=${encoded}`;
+    } else if (store.includes('flipkart')) {
+        return `https://www.flipkart.com/search?q=${encoded}`;
+    } else if (store.includes('croma')) {
+        return `https://www.croma.com/searchB?q=${encoded}%3Arelevance&text=${encoded}`;
+    } else if (store.includes('reliance')) {
+        return `https://www.reliancedigital.in/products?q=${encoded}&page_no=1&page_size=12&page_type=number`;
+    } else if (store.includes('vijay')) {
+        return `https://www.vijaysales.com/search?q=${encoded}`;
+    } else if (store.includes('myntra')) {
+        return `https://www.myntra.com/search?q=${encoded}`;
+    } else if (store.includes('ajio')) {
+        return `https://www.ajio.com/search/?text=${encoded}`;
+    } else if (store.includes('tata')) {
+        return `https://www.tatacliq.com/search/?searchCategory=all&text=${encoded}`;
+    } else if (store.includes('meesho')) {
+        return `https://www.meesho.com/search?q=${encoded}`;
+    }
+    return `https://www.google.com/search?q=${encoded}`;
 }
 
 function findAmazonDirectProduct(query) {
@@ -316,16 +365,16 @@ const VERIFIED_BENCHMARKS = [
             {
                 name: "Reliance Digital",
                 price: 74900,
-                url: "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20128gb",
+                url: "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20128gb&page_no=1&page_size=12&page_type=number",
                 avail: "In Stock",
-                action: "Compare on Reliance Digital ↗"
+                action: "Search on Reliance Digital ↗"
             },
             {
                 name: "Vijay Sales",
                 price: 75900,
                 url: "https://www.vijaysales.com/search?q=apple%20iphone%2016%20128gb",
                 avail: "In Stock",
-                action: "Compare on Vijay Sales ↗"
+                action: "Search on Vijay Sales ↗"
             },
             {
                 name: "Amazon",
@@ -354,21 +403,21 @@ const VERIFIED_BENCHMARKS = [
                 price: 79900,
                 url: "https://www.croma.com/searchB?q=apple%20iphone%2016%20plus%20128gb%3Arelevance&text=apple%20iphone%2016%20plus%20128gb",
                 avail: "In Stock",
-                action: "Buy on Croma ↗"
+                action: "Search on Croma ↗"
             },
             {
                 name: "Reliance Digital",
                 price: 84900,
-                url: "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20plus%20128gb",
+                url: "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20plus%20128gb&page_no=1&page_size=12&page_type=number",
                 avail: "In Stock",
-                action: "Compare on Reliance Digital ↗"
+                action: "Search on Reliance Digital ↗"
             },
             {
                 name: "Amazon",
                 price: 85999,
                 url: "https://www.amazon.in/s?k=apple+iphone+16+plus+128gb",
                 avail: "In Stock",
-                action: "Buy on Amazon ↗"
+                action: "Search on Amazon ↗"
             },
             {
                 name: "Flipkart",
@@ -404,14 +453,14 @@ const VERIFIED_BENCHMARKS = [
                 price: 59900,
                 url: "https://www.croma.com/searchB?q=apple%20iphone%2015%20128gb%3Arelevance&text=apple%20iphone%2015%20128gb",
                 avail: "In Stock",
-                action: "Compare on Croma ↗"
+                action: "Search on Croma ↗"
             },
             {
                 name: "Reliance Digital",
                 price: 61900,
-                url: "https://www.reliancedigital.in/products?q=apple%20iphone%2015%20128gb",
+                url: "https://www.reliancedigital.in/products?q=apple%20iphone%2015%20128gb&page_no=1&page_size=12&page_type=number",
                 avail: "In Stock",
-                action: "Compare on Reliance Digital ↗"
+                action: "Search on Reliance Digital ↗"
             }
         ]
     },
@@ -604,6 +653,8 @@ exports.handler = async function (event, context) {
             const cPrice = isSource ? basePrice : s.price;
             const oPrice = benchmark.mrp;
             const disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+            const isDirect = Boolean(isSource || isDirectProductUrl(s.url));
+            let action = isSource ? `Buy on ${s.name} ↗ (Your Link)` : (s.action || (isDirect ? `Buy on ${s.name} ↗ (Exact Model)` : `Search on ${s.name} ↗`));
             return {
                 website_name: s.name,
                 current_price: cPrice,
@@ -613,9 +664,9 @@ exports.handler = async function (event, context) {
                 product_url: isSource ? targetUrl : s.url,
                 is_lowest: false,
                 is_source: isSource,
-                is_exact_match: true,
-                match_type: "EXACT_MODEL",
-                action_label: isSource ? `Buy on ${s.name} ↗` : (s.action || `Buy on ${s.name} ↗`)
+                is_exact_match: isDirect,
+                match_type: isDirect ? "EXACT_MODEL" : "SEARCH_COMPARISON",
+                action_label: action
             };
         });
     } else {
@@ -639,83 +690,69 @@ exports.handler = async function (event, context) {
         if (category === "Electronics") {
             const flipkartUrl = isSourceFlipkart 
                 ? targetUrl 
-                : (flipkartDirectProduct ? flipkartDirectProduct.url : `https://www.flipkart.com/search?q=${encodedClean}`);
+                : (flipkartDirectProduct ? flipkartDirectProduct.url : getStoreSearchUrl('Flipkart', cleanTerm));
 
             const amazonUrl = isSourceAmazon 
                 ? targetUrl 
-                : (amazonDirectProduct ? amazonDirectProduct.url : `https://www.amazon.in/s?k=${encodedClean}`);
+                : (amazonDirectProduct ? amazonDirectProduct.url : getStoreSearchUrl('Amazon', cleanTerm));
+
+            const cromaUrl = isSourceCroma
+                ? targetUrl
+                : getStoreSearchUrl('Croma', cleanTerm);
+
+            const relianceUrl = (sourceStoreName === "Reliance Digital")
+                ? targetUrl
+                : getStoreSearchUrl('Reliance Digital', cleanTerm);
+
+            const vijayUrl = (sourceStoreName === "Vijay Sales")
+                ? targetUrl
+                : getStoreSearchUrl('Vijay Sales', cleanTerm);
 
             stores = [
-                { 
-                    name: "Croma", 
-                    url: isSourceCroma ? targetUrl : `https://www.croma.com/searchB?q=${encodedClean}%3Arelevance&text=${encodedClean}`, 
-                    mult: isSourceCroma ? 1.0 : 0.95, 
-                    avail: "In Stock" 
-                },
-                { 
-                    name: "Reliance Digital", 
-                    url: `https://www.reliancedigital.in/products?q=${encodedClean}`, 
-                    mult: 0.98, 
-                    avail: "In Stock" 
-                },
-                { 
-                    name: "Vijay Sales", 
-                    url: `https://www.vijaysales.com/search?q=${encodedClean}`, 
-                    mult: 0.99, 
-                    avail: "In Stock" 
-                },
-                { 
-                    name: "Amazon", 
-                    url: amazonUrl, 
-                    mult: isSourceAmazon ? 1.0 : 1.0, 
-                    avail: (isSourceAmazon || amazonDirectProduct) ? "In Stock (Exact Model)" : "In Stock", 
-                    isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) 
-                },
-                { 
-                    name: "Flipkart", 
-                    url: flipkartUrl, 
-                    mult: isSourceFlipkart ? 1.0 : 1.0, 
-                    avail: (isSourceFlipkart || flipkartDirectProduct) ? "In Stock (Exact Model)" : "In Stock", 
-                    isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) 
-                }
+                { name: "Croma", url: cromaUrl, mult: isSourceCroma ? 1.0 : 0.99, isDirectResolved: Boolean(isSourceCroma || isDirectProductUrl(cromaUrl)) },
+                { name: "Reliance Digital", url: relianceUrl, mult: 1.0, isDirectResolved: Boolean(sourceStoreName === "Reliance Digital" || isDirectProductUrl(relianceUrl)) },
+                { name: "Vijay Sales", url: vijayUrl, mult: 1.01, isDirectResolved: Boolean(sourceStoreName === "Vijay Sales" || isDirectProductUrl(vijayUrl)) },
+                { name: "Amazon", url: amazonUrl, mult: isSourceAmazon ? 1.0 : 1.0, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct || isDirectProductUrl(amazonUrl)) },
+                { name: "Flipkart", url: flipkartUrl, mult: isSourceFlipkart ? 1.0 : 1.0, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct || isDirectProductUrl(flipkartUrl)) }
             ];
         } else if (category === "Fashion") {
             const amazonUrl = isSourceAmazon 
                 ? targetUrl 
-                : (amazonDirectProduct ? amazonDirectProduct.url : `https://www.amazon.in/s?k=${encodedClean}`);
+                : (amazonDirectProduct ? amazonDirectProduct.url : getStoreSearchUrl('Amazon', cleanTerm));
 
             const flipkartUrl = isSourceFlipkart 
                 ? targetUrl 
-                : (flipkartDirectProduct ? flipkartDirectProduct.url : `https://www.flipkart.com/search?q=${encodedClean}`);
+                : (flipkartDirectProduct ? flipkartDirectProduct.url : getStoreSearchUrl('Flipkart', cleanTerm));
 
             stores = [
-                { name: "Flipkart", url: flipkartUrl, mult: 1.0, avail: "In Stock", isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) },
-                { name: "Meesho", url: isSourceMeesho ? targetUrl : `https://www.meesho.com/search?q=${encodedClean}`, mult: 0.95, avail: "In Stock" },
-                { name: "Amazon", url: amazonUrl, mult: 1.05, avail: "In Stock", isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) },
-                { name: "Myntra", url: isSourceMyntra ? targetUrl : `https://www.myntra.com/${dashClean}`, mult: 1.10, avail: "In Stock" },
-                { name: "Ajio", url: isSourceAjio ? targetUrl : `https://www.ajio.com/search/?text=${encodedClean}`, mult: 1.08, avail: "In Stock" },
-                { name: "Tata CLiQ", url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodedClean}`, mult: 1.12, avail: "In Stock" }
+                { name: "Flipkart", url: flipkartUrl, mult: 1.0, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) },
+                { name: "Meesho", url: isSourceMeesho ? targetUrl : getStoreSearchUrl('Meesho', cleanTerm), mult: 0.95, isDirectResolved: Boolean(isSourceMeesho) },
+                { name: "Amazon", url: amazonUrl, mult: 1.05, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) },
+                { name: "Myntra", url: isSourceMyntra ? targetUrl : getStoreSearchUrl('Myntra', cleanTerm), mult: 1.10, isDirectResolved: Boolean(isSourceMyntra) },
+                { name: "Ajio", url: isSourceAjio ? targetUrl : getStoreSearchUrl('Ajio', cleanTerm), mult: 1.08, isDirectResolved: Boolean(isSourceAjio) },
+                { name: "Tata CLiQ", url: getStoreSearchUrl('Tata CLiQ', cleanTerm), mult: 1.12, isDirectResolved: false }
             ];
         } else {
             const amazonUrl = isSourceAmazon 
                 ? targetUrl 
-                : (amazonDirectProduct ? amazonDirectProduct.url : `https://www.amazon.in/s?k=${encodedClean}`);
+                : (amazonDirectProduct ? amazonDirectProduct.url : getStoreSearchUrl('Amazon', cleanTerm));
 
             const flipkartUrl = isSourceFlipkart 
                 ? targetUrl 
-                : (flipkartDirectProduct ? flipkartDirectProduct.url : `https://www.flipkart.com/search?q=${encodedClean}`);
+                : (flipkartDirectProduct ? flipkartDirectProduct.url : getStoreSearchUrl('Flipkart', cleanTerm));
 
             stores = [
-                { name: "Flipkart", url: flipkartUrl, mult: 0.98, avail: "In Stock", isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) },
-                { name: "Amazon", url: amazonUrl, mult: 1.0, avail: "In Stock", isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) },
-                { name: "Meesho", url: isSourceMeesho ? targetUrl : `https://www.meesho.com/search?q=${encodedClean}`, mult: 0.95, avail: "In Stock" },
-                { name: "Myntra", url: `https://www.myntra.com/${dashClean}`, mult: 1.04, avail: "In Stock" },
-                { name: "Ajio", url: `https://www.ajio.com/search/?text=${encodedClean}`, mult: 1.02, avail: "In Stock" }
+                { name: "Flipkart", url: flipkartUrl, mult: 0.98, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) },
+                { name: "Amazon", url: amazonUrl, mult: 1.0, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) },
+                { name: "Meesho", url: isSourceMeesho ? targetUrl : getStoreSearchUrl('Meesho', cleanTerm), mult: 0.95, isDirectResolved: Boolean(isSourceMeesho) },
+                { name: "Myntra", url: isSourceMyntra ? targetUrl : getStoreSearchUrl('Myntra', cleanTerm), mult: 1.04, isDirectResolved: Boolean(isSourceMyntra) },
+                { name: "Ajio", url: isSourceAjio ? targetUrl : getStoreSearchUrl('Ajio', cleanTerm), mult: 1.02, isDirectResolved: Boolean(isSourceAjio) }
             ];
         }
 
         priceList = stores.map((s, idx) => {
-            const isSource = Boolean(sourceStoreName && s.name === sourceStoreName);
+            const isSource = Boolean(sourceStoreName && s.name.toLowerCase() === sourceStoreName.toLowerCase());
+            const isDirect = Boolean(isSource || s.isDirectResolved || isDirectProductUrl(s.url));
             let cPrice;
             let oPrice;
             let disc;
@@ -731,9 +768,8 @@ exports.handler = async function (event, context) {
                 avail = "In Stock (Exact Match)";
                 isExactMatch = true;
                 matchType = "EXACT_MODEL";
-                actionLabel = `Buy on ${s.name} ↗`;
+                actionLabel = `Buy on ${s.name} ↗ (Your Link)`;
             } else if (isPlatformExclusive) {
-                // Boutique / unbranded seller: competitor stores show category alternatives
                 cPrice = Math.round(basePrice * (1.08 + idx * 0.03));
                 oPrice = Math.max(originalPrice, Math.round(cPrice * 1.25));
                 disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
@@ -741,15 +777,22 @@ exports.handler = async function (event, context) {
                 isExactMatch = false;
                 matchType = "CATEGORY_SIMILAR";
                 actionLabel = `Search Similar on ${s.name} ↗`;
-            } else {
-                // Universal brand sold across platforms (e.g. realme, iPhone, boAt, Nike)
-                cPrice = Math.round(basePrice * s.mult);
+            } else if (isDirect) {
+                cPrice = Math.round((basePrice * (s.mult || 1.0)) / 10) * 10;
                 oPrice = Math.max(originalPrice, Math.round(cPrice * 1.18));
                 disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
-                avail = s.avail || "In Stock";
+                avail = "In Stock (Exact Model)";
                 isExactMatch = true;
                 matchType = "EXACT_MODEL";
-                actionLabel = s.isDirectResolved ? `Buy on ${s.name} ↗` : `Compare on ${s.name} ↗`;
+                actionLabel = `Buy on ${s.name} ↗ (Exact Model)`;
+            } else {
+                cPrice = Math.round((basePrice * (s.mult || 1.0)) / 10) * 10;
+                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.18));
+                disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+                avail = "Available in Search";
+                isExactMatch = false;
+                matchType = "SEARCH_COMPARISON";
+                actionLabel = `Search on ${s.name} ↗`;
             }
 
             return {

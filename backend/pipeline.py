@@ -29,19 +29,77 @@ def clean_search_term(title: str) -> str:
     if not title:
         return ""
     clean = title
+    clean = clean.split('?')[0].split('#')[0]
+    if clean.startswith(("http://", "https://", "www.")):
+        try:
+            target = "https://" + clean if clean.startswith("www.") else clean
+            parsed = urlparse(target)
+            path_parts = [p for p in parsed.path.split('/') if p and len(p) > 2 and p.lower() not in ['p', 'dp', 'gp', 'product', 'itm', 'search']]
+            if path_parts:
+                clean = path_parts[0].replace('-', ' ').replace('_', ' ')
+        except Exception:
+            pass
     clean = re.sub(r'online\s+at\s+best\s+prices.*$', '', clean, flags=re.IGNORECASE)
-    clean = re.sub(r'\|\s*(flipkart|amazon|croma|myntra|ajio|reliance|vijay\s*sales).*$', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'\|\s*(flipkart|amazon|croma|myntra|ajio|reliance|vijay\s*sales|meesho|tata\s*cliq).*$', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'-\s*buy\s+online.*$', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'buy\s+online.*$', '', clean, flags=re.IGNORECASE)
-    clean = re.sub(r'\b(flipkart\.com|amazon\.in|croma\.com|reliancedigital\.in)\b', '', clean, flags=re.IGNORECASE)
-    clean = re.sub(r'\([^)]*\)', ' ', clean)
-    clean = re.sub(r'\[[^\]]*\]', ' ', clean)
-    clean = re.sub(r'[,:|\/\\]', ' ', clean)
+    clean = re.sub(r'\b(flipkart\.com|amazon\.in|croma\.com|reliancedigital\.in|tatacliq\.com|myntra\.com|ajio\.com|meesho\.com)\b', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'\b(with\s+camera\s+control|camera\s+control|works\s+with|built\s+for\s+apple\s+intelligence)\b.*$', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r':\s*5G\s+Mobile\s+Phone.*$', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'[\(\[\{][^\)\]\}]*[\)\]\}]', ' ', clean)
+    clean = re.sub(r'[,:;|\/\\_+]', ' ', clean)
     clean = re.sub(r'\s+', ' ', clean).strip()
-    words = [w for w in clean.split() if w]
-    if len(words) > 6:
-        clean = " ".join(words[:6])
-    return clean
+    words = [w for w in clean.split() if len(w) > 1 and not re.match(r'^(with|for|and|the|buy|online|price|india|latest)$', w, re.IGNORECASE)]
+    if len(words) > 5:
+        clean = " ".join(words[:5])
+    elif len(words) > 0:
+        clean = " ".join(words)
+    return clean or title
+
+
+def is_direct_product_url(url: str) -> bool:
+    if not url:
+        return False
+    lower = url.lower()
+    if "/dp/" in lower or "/gp/product/" in lower:
+        return True
+    if "/p/itm" in lower or ("flipkart.com" in lower and "/p/" in lower):
+        return True
+    if "croma.com" in lower and "/p/" in lower:
+        return True
+    if "reliancedigital.in" in lower and "/p/" in lower:
+        return True
+    if "vijaysales.com" in lower and "/p/" in lower:
+        return True
+    if "myntra.com" in lower and re.search(r'/\d+/buy', lower):
+        return True
+    if "ajio.com" in lower and "/p/" in lower:
+        return True
+    return False
+
+
+def get_store_search_url(store_name: str, clean_term: str) -> str:
+    encoded = quote_plus(clean_term)
+    store = (store_name or "").lower()
+    if "amazon" in store:
+        return f"https://www.amazon.in/s?k={encoded}"
+    elif "flipkart" in store:
+        return f"https://www.flipkart.com/search?q={encoded}"
+    elif "croma" in store:
+        return f"https://www.croma.com/searchB?q={encoded}%3Arelevance&text={encoded}"
+    elif "reliance" in store:
+        return f"https://www.reliancedigital.in/products?q={encoded}&page_no=1&page_size=12&page_type=number"
+    elif "vijay" in store:
+        return f"https://www.vijaysales.com/search?q={encoded}"
+    elif "myntra" in store:
+        return f"https://www.myntra.com/search?q={encoded}"
+    elif "ajio" in store:
+        return f"https://www.ajio.com/search/?text={encoded}"
+    elif "tata" in store:
+        return f"https://www.tatacliq.com/search/?searchCategory=all&text={encoded}"
+    elif "meesho" in store:
+        return f"https://www.meesho.com/search?q={encoded}"
+    return f"https://www.google.com/search?q={encoded}"
 
 
 
@@ -154,35 +212,35 @@ VERIFIED_BENCHMARKS = [
                 "price": 69900.0,
                 "url": "https://www.croma.com/apple-iphone-16-128gb-black-/p/309621",
                 "avail": "In Stock (Exact Model)",
-                "action": "Buy on Croma ↗"
+                "action": "Buy on Croma ↗ (Exact Model)"
             },
             {
                 "name": "Reliance Digital",
                 "price": 74900.0,
-                "url": "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20128gb",
+                "url": "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20128gb&page_no=1&page_size=12&page_type=number",
                 "avail": "In Stock",
-                "action": "Compare on Reliance Digital ↗"
+                "action": "Search on Reliance Digital ↗"
             },
             {
                 "name": "Vijay Sales",
                 "price": 75900.0,
                 "url": "https://www.vijaysales.com/search?q=apple%20iphone%2016%20128gb",
                 "avail": "In Stock",
-                "action": "Compare on Vijay Sales ↗"
+                "action": "Search on Vijay Sales ↗"
             },
             {
                 "name": "Amazon",
                 "price": 76999.0,
                 "url": "https://www.amazon.in/dp/B0DGHZWBYB",
                 "avail": "In Stock (Exact Model)",
-                "action": "Buy on Amazon ↗"
+                "action": "Buy on Amazon ↗ (Exact Model)"
             },
             {
                 "name": "Flipkart",
                 "price": 79900.0,
                 "url": "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef",
                 "avail": "In Stock (Exact Model)",
-                "action": "Buy on Flipkart ↗"
+                "action": "Buy on Flipkart ↗ (Exact Model)"
             }
         ]
     },
@@ -197,28 +255,28 @@ VERIFIED_BENCHMARKS = [
                 "price": 79900.0,
                 "url": "https://www.croma.com/searchB?q=apple%20iphone%2016%20plus%20128gb%3Arelevance&text=apple%20iphone%2016%20plus%20128gb",
                 "avail": "In Stock",
-                "action": "Buy on Croma ↗"
+                "action": "Search on Croma ↗"
             },
             {
                 "name": "Reliance Digital",
                 "price": 84900.0,
-                "url": "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20plus%20128gb",
+                "url": "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20plus%20128gb&page_no=1&page_size=12&page_type=number",
                 "avail": "In Stock",
-                "action": "Compare on Reliance Digital ↗"
+                "action": "Search on Reliance Digital ↗"
             },
             {
                 "name": "Amazon",
                 "price": 85999.0,
                 "url": "https://www.amazon.in/s?k=apple+iphone+16+plus+128gb",
                 "avail": "In Stock",
-                "action": "Buy on Amazon ↗"
+                "action": "Search on Amazon ↗"
             },
             {
                 "name": "Flipkart",
                 "price": 89900.0,
                 "url": "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef",
                 "avail": "In Stock (Exact Model)",
-                "action": "Buy on Flipkart ↗"
+                "action": "Buy on Flipkart ↗ (Exact Model)"
             }
         ]
     },
@@ -233,28 +291,28 @@ VERIFIED_BENCHMARKS = [
                 "price": 57999.0,
                 "url": "https://www.flipkart.com/search?q=apple+iphone+15+128gb",
                 "avail": "In Stock (Exact Model)",
-                "action": "Buy on Flipkart ↗"
+                "action": "Buy on Flipkart ↗ (Exact Model)"
             },
             {
                 "name": "Amazon",
                 "price": 58999.0,
                 "url": "https://www.amazon.in/s?k=apple+iphone+15+128gb",
                 "avail": "In Stock (Exact Model)",
-                "action": "Buy on Amazon ↗"
+                "action": "Buy on Amazon ↗ (Exact Model)"
             },
             {
                 "name": "Croma",
                 "price": 59900.0,
                 "url": "https://www.croma.com/searchB?q=apple%20iphone%2015%20128gb%3Arelevance&text=apple%20iphone%2015%20128gb",
                 "avail": "In Stock",
-                "action": "Compare on Croma ↗"
+                "action": "Search on Croma ↗"
             },
             {
                 "name": "Reliance Digital",
                 "price": 61900.0,
-                "url": "https://www.reliancedigital.in/products?q=apple%20iphone%2015%20128gb",
+                "url": "https://www.reliancedigital.in/products?q=apple%20iphone%2015%20128gb&page_no=1&page_size=12&page_type=number",
                 "avail": "In Stock",
-                "action": "Compare on Reliance Digital ↗"
+                "action": "Search on Reliance Digital ↗"
             }
         ]
     },
@@ -269,21 +327,21 @@ VERIFIED_BENCHMARKS = [
                 "price": 30999.0,
                 "url": "https://www.flipkart.com/search?q=realme+p4+pro+5g",
                 "avail": "In Stock (Exact Model)",
-                "action": "Buy on Flipkart ↗"
+                "action": "Buy on Flipkart ↗ (Exact Model)"
             },
             {
                 "name": "Croma",
                 "price": 31499.0,
                 "url": "https://www.croma.com/searchB?q=realme+p4+pro%3Arelevance&text=realme+p4+pro",
                 "avail": "In Stock",
-                "action": "Compare on Croma ↗"
+                "action": "Search on Croma ↗"
             },
             {
                 "name": "Amazon",
                 "price": 31999.0,
                 "url": "https://www.amazon.in/dp/B0HBCLFSZ1",
                 "avail": "In Stock (Exact Model)",
-                "action": "Buy on Amazon ↗"
+                "action": "Buy on Amazon ↗ (Exact Model)"
             }
         ]
     }
@@ -378,33 +436,35 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         direct_flipkart_url = "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef"
 
     if category == "Fashion":
-        amazon_url = query if "amazon." in domain else (direct_amazon_url or f"https://www.amazon.in/s?k={encoded_name}")
+        amazon_url = query if "amazon." in domain else (direct_amazon_url or get_store_search_url("Amazon", clean_term))
+        flipkart_url = query if "flipkart." in domain else (direct_flipkart_url or get_store_search_url("Flipkart", clean_term))
         stores = [
-            {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={encoded_name}", "mult": 1.0, "avail": "In Stock"},
-            {"name": "Meesho", "url": query if "meesho." in domain else f"https://www.meesho.com/search?q={encoded_name}", "mult": 0.95, "avail": "In Stock"},
+            {"name": "Flipkart", "url": flipkart_url, "mult": 1.0, "avail": "In Stock"},
+            {"name": "Meesho", "url": query if "meesho." in domain else get_store_search_url("Meesho", clean_term), "mult": 0.95, "avail": "In Stock"},
             {"name": "Amazon", "url": amazon_url, "mult": 1.05, "avail": "In Stock"},
-            {"name": "Myntra", "url": query if "myntra." in domain else f"https://www.myntra.com/{dash_name}", "mult": 1.10, "avail": "In Stock"},
-            {"name": "Ajio", "url": query if "ajio." in domain else f"https://www.ajio.com/search/?text={encoded_name}", "mult": 1.08, "avail": "In Stock"},
-            {"name": "Tata CLiQ", "url": query if "tatacliq." in domain else f"https://www.tatacliq.com/search/?searchCategory=all&text={encoded_name}", "mult": 1.12, "avail": "In Stock"}
+            {"name": "Myntra", "url": query if "myntra." in domain else get_store_search_url("Myntra", clean_term), "mult": 1.10, "avail": "In Stock"},
+            {"name": "Ajio", "url": query if "ajio." in domain else get_store_search_url("Ajio", clean_term), "mult": 1.08, "avail": "In Stock"},
+            {"name": "Tata CLiQ", "url": query if "tatacliq." in domain else get_store_search_url("Tata CLiQ", clean_term), "mult": 1.12, "avail": "In Stock"}
         ]
     elif category == "Electronics":
-        amazon_url = query if "amazon." in domain else (direct_amazon_url or f"https://www.amazon.in/s?k={encoded_name}")
-        flipkart_url = query if "flipkart." in domain else (direct_flipkart_url or f"https://www.flipkart.com/search?q={encoded_name}")
+        amazon_url = query if "amazon." in domain else (direct_amazon_url or get_store_search_url("Amazon", clean_term))
+        flipkart_url = query if "flipkart." in domain else (direct_flipkart_url or get_store_search_url("Flipkart", clean_term))
         stores = [
-            {"name": "Croma", "url": query if "croma." in domain else f"https://www.croma.com/searchB?q={encoded_name}%3Arelevance&text={encoded_name}", "mult": 0.985, "avail": "In Stock"},
-            {"name": "Reliance Digital", "url": query if "reliancedigital." in domain else f"https://www.reliancedigital.in/products?q={encoded_name}", "mult": 0.995, "avail": "In Stock"},
-            {"name": "Vijay Sales", "url": f"https://www.vijaysales.com/search?q={encoded_name}", "mult": 1.002, "avail": "In Stock"},
-            {"name": "Amazon", "url": amazon_url, "mult": 1.0, "avail": "In Stock (Exact Model)" if direct_amazon_url else "In Stock"},
-            {"name": "Flipkart", "url": flipkart_url, "mult": 1.01, "avail": "In Stock (Exact Model)" if direct_flipkart_url else "In Stock"}
+            {"name": "Croma", "url": query if "croma." in domain else get_store_search_url("Croma", clean_term), "mult": 0.99, "avail": "In Stock"},
+            {"name": "Reliance Digital", "url": query if "reliancedigital." in domain else get_store_search_url("Reliance Digital", clean_term), "mult": 1.0, "avail": "In Stock"},
+            {"name": "Vijay Sales", "url": query if "vijaysales." in domain else get_store_search_url("Vijay Sales", clean_term), "mult": 1.01, "avail": "In Stock"},
+            {"name": "Amazon", "url": amazon_url, "mult": 1.0, "avail": "In Stock (Exact Model)" if (direct_amazon_url or is_direct_product_url(amazon_url)) else "In Stock"},
+            {"name": "Flipkart", "url": flipkart_url, "mult": 1.0, "avail": "In Stock (Exact Model)" if (direct_flipkart_url or is_direct_product_url(flipkart_url)) else "In Stock"}
         ]
     else:
-        amazon_url = query if "amazon." in domain else (direct_amazon_url or f"https://www.amazon.in/s?k={encoded_name}")
+        amazon_url = query if "amazon." in domain else (direct_amazon_url or get_store_search_url("Amazon", clean_term))
+        flipkart_url = query if "flipkart." in domain else (direct_flipkart_url or get_store_search_url("Flipkart", clean_term))
         stores = [
-            {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={encoded_name}", "mult": 0.96, "avail": "In Stock"},
+            {"name": "Flipkart", "url": flipkart_url, "mult": 0.98, "avail": "In Stock"},
             {"name": "Amazon", "url": amazon_url, "mult": 1.0, "avail": "In Stock"},
-            {"name": "Meesho", "url": query if "meesho." in domain else f"https://www.meesho.com/search?q={encoded_name}", "mult": 0.92, "avail": "In Stock"},
-            {"name": "Myntra", "url": f"https://www.myntra.com/{dash_name}", "mult": 1.04, "avail": "In Stock"},
-            {"name": "Ajio", "url": f"https://www.ajio.com/search/?text={encoded_name}", "mult": 1.02, "avail": "In Stock"}
+            {"name": "Meesho", "url": query if "meesho." in domain else get_store_search_url("Meesho", clean_term), "mult": 0.95, "avail": "In Stock"},
+            {"name": "Myntra", "url": query if "myntra." in domain else get_store_search_url("Myntra", clean_term), "mult": 1.04, "avail": "In Stock"},
+            {"name": "Ajio", "url": query if "ajio." in domain else get_store_search_url("Ajio", clean_term), "mult": 1.02, "avail": "In Stock"}
         ]
 
     UNIVERSAL_BRANDS = [
@@ -463,23 +523,29 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
 
         for idx, store in enumerate(stores):
             is_source_store = bool(scraped_site and scraped_site in store["name"].lower())
+            is_direct = is_source_store or is_direct_product_url(store["url"])
             if is_source_store:
                 c_price = scraped_price
                 o_price = source_mrp
                 disc = float(scraped_data.discount_percent) if (scraped_data and scraped_data.discount_percent) else round(((o_price - c_price) / o_price) * 100, 1)
                 avail = "In Stock (Exact Match)"
             elif is_platform_exclusive:
-                # Competitor shopping alternatives carry realistic retail comparison pricing above the verified deal
-                c_price = round(scraped_price * (1.08 + idx * 0.03), 2)
-                o_price = max(source_mrp, round(c_price * 1.25, 2))
+                c_price = float(round(round((scraped_price * (1.08 + idx * 0.03)) / 10) * 10))
+                o_price = max(source_mrp, float(round((c_price * 1.25) / 10) * 10))
                 disc = round(((o_price - c_price) / o_price) * 100, 1)
                 avail = "Comparable Items in Stock"
+            elif is_direct:
+                retail_mult = store.get("mult", 1.0)
+                c_price = float(round(round((scraped_price * retail_mult) / 10) * 10))
+                o_price = max(source_mrp, float(round((c_price * 1.18) / 10) * 10))
+                disc = round(((o_price - c_price) / o_price) * 100, 1)
+                avail = "In Stock (Exact Model)"
             else:
                 retail_mult = store.get("mult", 1.0)
-                c_price = round(scraped_price * retail_mult, 2)
-                o_price = max(source_mrp, round(c_price * 1.20, 2))
+                c_price = float(round(round((scraped_price * retail_mult) / 10) * 10))
+                o_price = max(source_mrp, float(round((c_price * 1.18) / 10) * 10))
                 disc = round(((o_price - c_price) / o_price) * 100, 1)
-                avail = store["avail"]
+                avail = "Available in Search"
 
             price_obj = ProductPrice(
                 product_id=product.product_id,
@@ -796,9 +862,18 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
                 "product_url": p.product_url,
                 "is_lowest": (p.website_name == lowest_price_store.website_name),
                 "is_source": bool(scraped_site and scraped_site in p.website_name.lower()),
-                "is_exact_match": True if not is_platform_exclusive else bool(scraped_site and scraped_site in p.website_name.lower()),
-                "match_type": "EXACT_MODEL" if not is_platform_exclusive else ("EXACT_MODEL" if (scraped_site and scraped_site in p.website_name.lower()) else "CATEGORY_SIMILAR"),
-                "action_label": (f"Buy on {p.website_name} ↗" if (scraped_site and scraped_site in p.website_name.lower()) else (f"Search Similar on {p.website_name} ↗" if is_platform_exclusive else f"Compare on {p.website_name} ↗"))
+                "is_exact_match": bool(scraped_site and scraped_site in p.website_name.lower()) or is_direct_product_url(p.product_url),
+                "match_type": (
+                    "EXACT_MODEL" if (bool(scraped_site and scraped_site in p.website_name.lower()) or is_direct_product_url(p.product_url))
+                    else ("CATEGORY_SIMILAR" if is_platform_exclusive else "SEARCH_COMPARISON")
+                ),
+                "action_label": (
+                    f"Buy on {p.website_name} ↗ (Your Link)" if (bool(scraped_site and scraped_site in p.website_name.lower()))
+                    else (
+                        f"Search Similar on {p.website_name} ↗" if is_platform_exclusive
+                        else (f"Buy on {p.website_name} ↗ (Exact Model)" if is_direct_product_url(p.product_url) else f"Search on {p.website_name} ↗")
+                    )
+                )
             }
             for p in sorted_prices
         ],
