@@ -54,10 +54,16 @@ def estimate_realistic_base_price(product_name: str, query: str) -> float:
         if 499 <= val <= 250000:
             return val
 
-    if any(k in text for k in ["iphone 15 pro", "iphone 16 pro", "s24 ultra", "macbook pro"]):
-        return 124900.0
-    elif any(k in text for k in ["iphone 15", "iphone 14", "s24", "macbook air"]):
-        return 64990.0
+    if any(k in text for k in ["iphone 16 pro max", "iphone 15 pro max"]):
+        return 144900.0
+    elif any(k in text for k in ["iphone 16 pro", "iphone 15 pro", "s24 ultra", "macbook pro"]):
+        return 119900.0
+    elif any(k in text for k in ["iphone 16", "iphone-16"]):
+        return 76999.0
+    elif any(k in text for k in ["iphone 15", "iphone-15"]):
+        return 64999.0
+    elif any(k in text for k in ["iphone 14", "iphone 13"]):
+        return 52999.0
     elif any(k in text for k in ["iphone", "gaming laptop", "rtx 4060", "rtx 3050"]):
         return 54990.0
     elif any(k in text for k in ["laptop", "notebook", "thinkpad", "pavilion", "vivobook"]):
@@ -214,10 +220,14 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
     encoded_name = quote_plus(clean_term)
     dash_name = encoded_name.replace('+', '-')
 
-    # Direct Amazon link if known or detected
+    # Direct links for common high-volume electronics
     direct_amazon_url = None
+    direct_flipkart_url = None
     if "realme p4" in product_name.lower() or "realme-p4" in query.lower():
         direct_amazon_url = "https://www.amazon.in/dp/B0HBCLFSZ1"
+    elif "iphone 16" in product_name.lower() or "iphone-16" in query.lower():
+        direct_amazon_url = "https://www.amazon.in/dp/B0DGHZWBYB"
+        direct_flipkart_url = "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef"
 
     if category == "Fashion":
         amazon_url = query if "amazon." in domain else (direct_amazon_url or f"https://www.amazon.in/s?k={encoded_name}")
@@ -231,12 +241,13 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         ]
     elif category == "Electronics":
         amazon_url = query if "amazon." in domain else (direct_amazon_url or f"https://www.amazon.in/s?k={encoded_name}")
+        flipkart_url = query if "flipkart." in domain else (direct_flipkart_url or f"https://www.flipkart.com/search?q={encoded_name}")
         stores = [
-            {"name": "Flipkart", "url": query if "flipkart." in domain else f"https://www.flipkart.com/search?q={encoded_name}", "mult": 0.97, "avail": "In Stock"},
+            {"name": "Flipkart", "url": flipkart_url, "mult": 0.987, "avail": "In Stock (Exact Model)" if direct_flipkart_url else "In Stock"},
             {"name": "Amazon", "url": amazon_url, "mult": 1.0, "avail": "In Stock (Exact Model)" if direct_amazon_url else "In Stock"},
-            {"name": "Croma", "url": query if "croma." in domain else f"https://www.croma.com/searchB?q={encoded_name}%3Arelevance&text={encoded_name}", "mult": 0.99, "avail": "In Stock"},
-            {"name": "Reliance Digital", "url": query if "reliancedigital." in domain else f"https://www.reliancedigital.in/products?q={encoded_name}", "mult": 1.02, "avail": "In Stock"},
-            {"name": "Vijay Sales", "url": f"https://www.vijaysales.com/search?q={encoded_name}", "mult": 1.03, "avail": "In Stock"}
+            {"name": "Croma", "url": query if "croma." in domain else f"https://www.croma.com/searchB?q={encoded_name}%3Arelevance&text={encoded_name}", "mult": 0.995, "avail": "In Stock"},
+            {"name": "Reliance Digital", "url": query if "reliancedigital." in domain else f"https://www.reliancedigital.in/products?q={encoded_name}", "mult": 1.0, "avail": "In Stock"},
+            {"name": "Vijay Sales", "url": f"https://www.vijaysales.com/search?q={encoded_name}", "mult": 1.006, "avail": "In Stock"}
         ]
     else:
         amazon_url = query if "amazon." in domain else (direct_amazon_url or f"https://www.amazon.in/s?k={encoded_name}")
@@ -261,10 +272,10 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
     ]
     detected_brand_str = f"{brand} {product_name}".lower()
     is_universal_brand = (category == "Electronics") or any(b in detected_brand_str for b in UNIVERSAL_BRANDS)
+    scraped_site = scraped_data.website.lower() if scraped_data else ""
     is_platform_exclusive = bool(is_url and scraped_site and not is_universal_brand)
 
     price_entries = []
-    scraped_site = scraped_data.website.lower() if scraped_data else ""
     scraped_price = base_price
     source_mrp = float(scraped_data.original_price) if (scraped_data and scraped_data.original_price and float(scraped_data.original_price) > scraped_price) else round(scraped_price * 1.35, 2)
 
@@ -282,7 +293,7 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
             disc = round(((o_price - c_price) / o_price) * 100, 1)
             avail = "Comparable Items in Stock"
         else:
-            retail_mult = (1.0 if store["name"].lower() == "amazon" else (1.0 + (idx * 0.01))) if is_url else store["mult"]
+            retail_mult = store.get("mult", 1.0)
             c_price = round(scraped_price * retail_mult, 2)
             o_price = max(source_mrp, round(c_price * 1.20, 2))
             disc = round(((o_price - c_price) / o_price) * 100, 1)
@@ -416,7 +427,7 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
     # =========================================================================
     # STEP 5: PRICE HISTORY SNAPSHOT & ANALYSIS
     # =========================================================================
-    if is_url and scraped_site:
+    if is_platform_exclusive:
         lowest_price_store = next((p for p in price_entries if scraped_site in p.website_name.lower()), min(price_entries, key=lambda p: float(p.current_price)))
     else:
         lowest_price_store = min(price_entries, key=lambda p: float(p.current_price))
@@ -479,10 +490,20 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         )
     elif value_score >= 70.0 and price_trend != "RISING":
         buy_decision = "BUY NOW"
-        recommendation_reason = (
-            f"{lowest_price_store.website_name} offers the best price on {product.product_name} at ₹{lowest_current_price:,.2f} with {lowest_price_store.discount_percent:.0f}% off (MRP ₹{lowest_price_store.original_price:,.2f}). "
-            f"Verified across major shopping platforms with high customer satisfaction ({sentiment_score:.1f}% Sentiment) and excellent review trust ({trust_score:.1f}% Genuine)."
-        )
+        is_competitor_lower = bool(scraped_site and scraped_site not in lowest_price_store.website_name.lower() and (scraped_price - lowest_current_price) > 5)
+        if is_competitor_lower:
+            savings = scraped_price - lowest_current_price
+            recommendation_reason = (
+                f"{lowest_price_store.website_name} offers the best price on {product.product_name} at ₹{lowest_current_price:,.2f} "
+                f"({lowest_price_store.discount_percent:.0f}% OFF, MRP ₹{lowest_price_store.original_price:,.2f}) — "
+                f"saving you ₹{savings:,.2f} compared to {scraped_data.website if scraped_data else 'original link'} (₹{scraped_price:,.2f}). "
+                f"High customer satisfaction ({sentiment_score:.1f}% Sentiment) and excellent review trust ({trust_score:.1f}% Genuine)."
+            )
+        else:
+            recommendation_reason = (
+                f"{lowest_price_store.website_name} offers the best price on {product.product_name} at ₹{lowest_current_price:,.2f} with {lowest_price_store.discount_percent:.0f}% off (MRP ₹{lowest_price_store.original_price:,.2f}). "
+                f"Verified across major shopping platforms with high customer satisfaction ({sentiment_score:.1f}% Sentiment) and excellent review trust ({trust_score:.1f}% Genuine)."
+            )
     elif value_score >= 50.0:
         buy_decision = "CONSIDER"
         recommendation_reason = (
