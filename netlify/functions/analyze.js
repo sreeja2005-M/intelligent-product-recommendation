@@ -309,7 +309,7 @@ const VERIFIED_BENCHMARKS = [
             {
                 name: "Croma",
                 price: 69900,
-                url: "https://www.croma.com/apple-iphone-16-128gb-black-/p/309071",
+                url: "https://www.croma.com/apple-iphone-16-128gb-black-/p/309621",
                 avail: "In Stock (Exact Model)",
                 action: "Buy on Croma ↗"
             },

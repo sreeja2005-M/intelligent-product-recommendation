@@ -551,7 +551,7 @@ function generateMockPipelineData(query) {
             category: "Electronics",
             mrp: 79900,
             stores: [
-                { name: "Croma", price: 69900, url: "https://www.croma.com/apple-iphone-16-128gb-black-/p/309071", avail: "In Stock (Exact Model)", action: "Buy on Croma ↗" },
+                { name: "Croma", price: 69900, url: "https://www.croma.com/apple-iphone-16-128gb-black-/p/309621", avail: "In Stock (Exact Model)", action: "Buy on Croma ↗" },
                 { name: "Reliance Digital", price: 74900, url: "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20128gb", avail: "In Stock", action: "Compare on Reliance Digital ↗" },
                 { name: "Vijay Sales", price: 75900, url: "https://www.vijaysales.com/search?q=apple%20iphone%2016%20128gb", avail: "In Stock", action: "Compare on Vijay Sales ↗" },
                 { name: "Amazon", price: 76999, url: "https://www.amazon.in/dp/B0DGHZWBYB", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗" },
