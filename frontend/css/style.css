@@ -1761,58 +1761,32 @@ footer > p {
     white-space: nowrap;
 }
 
-/* Match and Price Type Badges for store cards */
-.match-badge, .price-type-badge {
+/* Match badges for store cards */
+.match-badge {
     display: inline-block;
     font-size: 9px;
     font-weight: 800;
     letter-spacing: 0.5px;
-    padding: 3px 8px;
+    padding: 3px 7px;
     border-radius: 5px;
-    text-transform: uppercase;
 }
 
-.price-type-badge.verified-live-badge, .match-badge.exact-badge {
+.match-badge.exact-badge {
     background: rgba(34, 197, 94, 0.16);
     color: #4ade80;
     border: 1px solid rgba(34, 197, 94, 0.35);
 }
 
-.price-type-badge.comparable-badge, .match-badge.similar-badge {
-    background: rgba(129, 140, 248, 0.14);
-    color: #a5b4fc;
-    border: 1px solid rgba(129, 140, 248, 0.35);
+.match-badge.search-badge {
+    background: rgba(56, 189, 248, 0.14);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.35);
 }
 
-.price-type-badge.estimated-badge, .match-badge.search-badge {
-    background: rgba(245, 158, 11, 0.14);
-    color: #fbbf24;
-    border: 1px solid rgba(245, 158, 11, 0.35);
-}
-
-.decision-badge.price-comparison-not-verified {
-    background: rgba(245, 158, 11, 0.16);
-    color: #fbbf24;
-    border: 1px solid rgba(245, 158, 11, 0.4);
-}
-
-.source-link-badge {
-    background: rgba(100, 116, 139, 0.3);
-    border: 1px solid rgba(148, 163, 184, 0.4);
-    color: #cbd5e1;
-    font-size: 8px;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 4px;
-    letter-spacing: 0.5px;
-    display: inline-block;
-}
-
-.price-prefix {
-    font-size: 13px;
-    font-weight: 600;
+.match-badge.similar-badge {
+    background: rgba(148, 163, 184, 0.12);
     color: #94a3b8;
-    margin-right: 4px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
 }
 
 .est-prefix {
@@ -1822,15 +1796,9 @@ footer > p {
     margin-right: 4px;
 }
 
-.category-avg-tag, .comparable-note {
+.category-avg-tag {
     font-size: 10px;
-    color: #a5b4fc;
-    font-weight: 600;
-}
-
-.estimated-note {
-    font-size: 10px;
-    color: #fbbf24;
+    color: #64748b;
     font-weight: 600;
 }
 
@@ -1843,31 +1811,15 @@ footer > p {
     color: #94a3b8;
 }
 
-.availability.estimated-stock {
-    color: #fbbf24;
-}
-
 .visit-store-btn.similar-search-btn {
-    background: rgba(129, 140, 248, 0.08);
-    border: 1px solid rgba(129, 140, 248, 0.25);
-    color: #a5b4fc;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
 }
 
 .visit-store-btn.similar-search-btn:hover {
-    background: rgba(129, 140, 248, 0.22);
-    border-color: rgba(129, 140, 248, 0.5);
-    color: #ffffff;
-}
-
-.visit-store-btn.estimated-search-btn {
-    background: rgba(245, 158, 11, 0.08);
-    border: 1px solid rgba(245, 158, 11, 0.25);
-    color: #fbbf24;
-}
-
-.visit-store-btn.estimated-search-btn:hover {
-    background: rgba(245, 158, 11, 0.22);
-    border-color: rgba(245, 158, 11, 0.5);
+    background: rgba(139, 92, 246, 0.18);
+    border-color: rgba(139, 92, 246, 0.4);
     color: #ffffff;
 }
 
@@ -1875,11 +1827,6 @@ footer > p {
     border-color: rgba(52, 211, 153, 0.4);
     background: rgba(52, 211, 153, 0.04);
     box-shadow: 0 10px 30px rgba(52, 211, 153, 0.08);
-}
-
-.price-card.unverified-card {
-    border-color: rgba(255, 255, 255, 0.06);
-    background: rgba(255, 255, 255, 0.02);
 }
 
 

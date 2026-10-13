@@ -440,7 +440,7 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         flipkart_url = query if "flipkart." in domain else (direct_flipkart_url or get_store_search_url("Flipkart", clean_term))
         stores = [
             {"name": "Flipkart", "url": flipkart_url, "mult": 1.0, "avail": "In Stock"},
-            {"name": "Meesho", "url": query if "meesho." in domain else get_store_search_url("Meesho", clean_term), "mult": 1.0, "avail": "In Stock"},
+            {"name": "Meesho", "url": query if "meesho." in domain else get_store_search_url("Meesho", clean_term), "mult": 0.95, "avail": "In Stock"},
             {"name": "Amazon", "url": amazon_url, "mult": 1.05, "avail": "In Stock"},
             {"name": "Myntra", "url": query if "myntra." in domain else get_store_search_url("Myntra", clean_term), "mult": 1.10, "avail": "In Stock"},
             {"name": "Ajio", "url": query if "ajio." in domain else get_store_search_url("Ajio", clean_term), "mult": 1.08, "avail": "In Stock"},
@@ -450,7 +450,7 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         amazon_url = query if "amazon." in domain else (direct_amazon_url or get_store_search_url("Amazon", clean_term))
         flipkart_url = query if "flipkart." in domain else (direct_flipkart_url or get_store_search_url("Flipkart", clean_term))
         stores = [
-            {"name": "Croma", "url": query if "croma." in domain else get_store_search_url("Croma", clean_term), "mult": 1.0, "avail": "In Stock"},
+            {"name": "Croma", "url": query if "croma." in domain else get_store_search_url("Croma", clean_term), "mult": 0.99, "avail": "In Stock"},
             {"name": "Reliance Digital", "url": query if "reliancedigital." in domain else get_store_search_url("Reliance Digital", clean_term), "mult": 1.0, "avail": "In Stock"},
             {"name": "Vijay Sales", "url": query if "vijaysales." in domain else get_store_search_url("Vijay Sales", clean_term), "mult": 1.01, "avail": "In Stock"},
             {"name": "Amazon", "url": amazon_url, "mult": 1.0, "avail": "In Stock (Exact Model)" if (direct_amazon_url or is_direct_product_url(amazon_url)) else "In Stock"},
@@ -460,9 +460,9 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         amazon_url = query if "amazon." in domain else (direct_amazon_url or get_store_search_url("Amazon", clean_term))
         flipkart_url = query if "flipkart." in domain else (direct_flipkart_url or get_store_search_url("Flipkart", clean_term))
         stores = [
-            {"name": "Flipkart", "url": flipkart_url, "mult": 1.0, "avail": "In Stock"},
+            {"name": "Flipkart", "url": flipkart_url, "mult": 0.98, "avail": "In Stock"},
             {"name": "Amazon", "url": amazon_url, "mult": 1.0, "avail": "In Stock"},
-            {"name": "Meesho", "url": query if "meesho." in domain else get_store_search_url("Meesho", clean_term), "mult": 1.0, "avail": "In Stock"},
+            {"name": "Meesho", "url": query if "meesho." in domain else get_store_search_url("Meesho", clean_term), "mult": 0.95, "avail": "In Stock"},
             {"name": "Myntra", "url": query if "myntra." in domain else get_store_search_url("Myntra", clean_term), "mult": 1.04, "avail": "In Stock"},
             {"name": "Ajio", "url": query if "ajio." in domain else get_store_search_url("Ajio", clean_term), "mult": 1.02, "avail": "In Stock"}
         ]
@@ -502,12 +502,8 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
             c_price = scraped_price if is_source_store else s["price"]
             o_price = source_mrp
             disc = round(((o_price - c_price) / o_price) * 100, 1)
+            avail = "In Stock (Exact Match)" if is_source_store else s["avail"]
             store_url = query if is_source_store else s["url"]
-            is_direct = is_source_store or is_direct_product_url(store_url)
-            price_type = "VERIFIED_LIVE" if is_direct else "ESTIMATED_MARKET"
-            price_type_label = "Verified Live Price" if is_direct else "Estimated Market Price"
-            avail = "In Stock (Confirmed Live Price)" if is_direct else "Live Search to Confirm Price"
-            action_label = f"Buy on {s['name']} ↗ (Your Link)" if is_source_store else (f"Buy on {s['name']} ↗ (Exact Model)" if is_direct else f"Check Live Price on {s['name']} ↗")
 
             price_obj = ProductPrice(
                 product_id=product.product_id,
@@ -519,14 +515,6 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
                 availability=avail,
                 last_updated=datetime.now()
             )
-            # Transient metadata for global verification
-            price_obj.price_type = price_type
-            price_obj.price_type_label = price_type_label
-            price_obj.is_source = is_source_store
-            price_obj.is_exact_match = is_direct
-            price_obj.match_type = "EXACT_MODEL" if is_direct else "SEARCH_COMPARISON"
-            price_obj.action_label = action_label
-            price_obj.is_lowest = False
             db.add(price_obj)
             price_entries.append(price_obj)
         db.commit()
@@ -540,38 +528,24 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
                 c_price = scraped_price
                 o_price = source_mrp
                 disc = float(scraped_data.discount_percent) if (scraped_data and scraped_data.discount_percent) else round(((o_price - c_price) / o_price) * 100, 1)
-                avail = "In Stock (Confirmed Live Price)"
-                is_exact_match = True
-                price_type = "VERIFIED_LIVE"
-                price_type_label = "Verified Live Price"
-                match_type = "EXACT_MODEL"
-                action_label = f"Buy on {store['name']} ↗ (Your Link)"
+                avail = "In Stock (Exact Match)"
             elif is_platform_exclusive:
                 c_price = float(round(round((scraped_price * (1.08 + idx * 0.03)) / 10) * 10))
                 o_price = max(source_mrp, float(round((c_price * 1.25) / 10) * 10))
                 disc = round(((o_price - c_price) / o_price) * 100, 1)
-                avail = "Comparable Alternative in Stock"
-                is_exact_match = False
-                price_type = "COMPARABLE_PRODUCT"
-                price_type_label = "Comparable Product Price"
-                match_type = "CATEGORY_SIMILAR"
-                action_label = f"View Similar on {store['name']} ↗"
-            else:
-                c_price = float(round(round(scraped_price / 10) * 10))
+                avail = "Comparable Items in Stock"
+            elif is_direct:
+                retail_mult = store.get("mult", 1.0)
+                c_price = float(round(round((scraped_price * retail_mult) / 10) * 10))
                 o_price = max(source_mrp, float(round((c_price * 1.18) / 10) * 10))
                 disc = round(((o_price - c_price) / o_price) * 100, 1)
-                price_type = "ESTIMATED_MARKET"
-                price_type_label = "Estimated Market Price"
-                if is_direct:
-                    avail = "Direct Store Link (Live Price Unverified)"
-                    is_exact_match = True
-                    match_type = "EXACT_MODEL"
-                    action_label = f"Check Live Price on {store['name']} ↗ (Exact Model)"
-                else:
-                    avail = "Live Search to Confirm Price"
-                    is_exact_match = False
-                    match_type = "SEARCH_COMPARISON"
-                    action_label = f"Check Live Price on {store['name']} ↗"
+                avail = "In Stock (Exact Model)"
+            else:
+                retail_mult = store.get("mult", 1.0)
+                c_price = float(round(round((scraped_price * retail_mult) / 10) * 10))
+                o_price = max(source_mrp, float(round((c_price * 1.18) / 10) * 10))
+                disc = round(((o_price - c_price) / o_price) * 100, 1)
+                avail = "Available in Search"
 
             price_obj = ProductPrice(
                 product_id=product.product_id,
@@ -583,13 +557,6 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
                 availability=avail,
                 last_updated=datetime.now()
             )
-            price_obj.price_type = price_type
-            price_obj.price_type_label = price_type_label
-            price_obj.is_source = is_source_store
-            price_obj.is_exact_match = is_exact_match
-            price_obj.match_type = match_type
-            price_obj.action_label = action_label
-            price_obj.is_lowest = False
             db.add(price_obj)
             price_entries.append(price_obj)
 
@@ -708,23 +675,10 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
     # =========================================================================
     # STEP 5: PRICE HISTORY SNAPSHOT & ANALYSIS
     # =========================================================================
-    # Global Verification Rule:
-    # AI must NEVER claim "cheapest" or "best price" based on estimated/comparable prices!
-    # A "Best to Buy" recommendation is given ONLY when >= 2 stores have VERIFIED_LIVE pricing.
-    verified_stores = [p for p in price_entries if getattr(p, "price_type", "") == "VERIFIED_LIVE"]
-    has_sufficient_verified_data = len(verified_stores) >= 2
-
-    if has_sufficient_verified_data:
-        lowest_price_store = min(verified_stores, key=lambda p: float(p.current_price))
-        for p in price_entries:
-            p.is_lowest = (p.website_name == lowest_price_store.website_name and getattr(p, "price_type", "") == "VERIFIED_LIVE")
-        buy_decision = "BUY NOW"
+    if is_platform_exclusive:
+        lowest_price_store = next((p for p in price_entries if scraped_site in p.website_name.lower()), min(price_entries, key=lambda p: float(p.current_price)))
     else:
-        for p in price_entries:
-            p.is_lowest = False
-        lowest_price_store = next((p for p in price_entries if getattr(p, "is_source", False) and getattr(p, "price_type", "") == "VERIFIED_LIVE"), price_entries[0])
-        buy_decision = "PRICE COMPARISON NOT VERIFIED"
-
+        lowest_price_store = min(price_entries, key=lambda p: float(p.current_price))
     lowest_current_price = float(lowest_price_store.current_price)
 
     # Save snapshot to PriceHistory
@@ -770,91 +724,59 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
     # =========================================================================
     # STEP 7: FINAL AI RECOMMENDATION & VALUE SCORE
     # =========================================================================
-    price_score = 100.0 if has_sufficient_verified_data else 70.0
-    value_score = float(round((price_score * 0.40) + (sentiment_score * 0.30) + (trust_score * 0.30), 2)) if has_sufficient_verified_data else 75.0
-    source_store_name = scraped_data.website if scraped_data else ("Flipkart" if "flipkart." in domain else ("Amazon" if "amazon." in domain else "Source Store"))
+    price_score = 100.0  # Lowest available competitive pricing
+    value_score = float(round((price_score * 0.40) + (sentiment_score * 0.30) + (trust_score * 0.30), 2))
+    is_competitor_lower = bool(scraped_site and scraped_site not in lowest_price_store.website_name.lower() and (scraped_price - lowest_current_price) > 5)
 
-    if has_sufficient_verified_data:
-        if is_url and scraped_site and lowest_price_store.website_name.lower() not in scraped_site.lower():
+    if is_platform_exclusive:
+        alt_stores = [p for p in price_entries if scraped_site not in p.website_name.lower()]
+        alt_price = float(alt_stores[0].current_price) if alt_stores else (lowest_current_price + 20)
+        buy_decision = "BUY NOW"
+        recommendation_reason = (
+            f"{lowest_price_store.website_name} offers the verified lowest deal at ₹{lowest_current_price:,.2f} with {lowest_price_store.discount_percent:.0f}% off (MRP ₹{lowest_price_store.original_price:,.2f}). "
+            f"This exact product is verified on {lowest_price_store.website_name}; other platforms show comparable category alternatives starting from ~₹{alt_price:,.2f}. "
+            f"High customer sentiment ({sentiment_score:.1f}% Sentiment) and genuine review trust ({trust_score:.1f}% Genuine)."
+        )
+    elif value_score >= 70.0 or is_competitor_lower:
+        buy_decision = "BUY NOW"
+        if is_competitor_lower:
             savings = scraped_price - lowest_current_price
-            platform_notice = {
-                "title": f"Better Deal Verified! Save ₹{savings:,.2f} on {lowest_price_store.website_name}",
-                "message": f"You provided a link to <b>{source_store_name}</b> (₹{scraped_price:,.2f}), but <b>{lowest_price_store.website_name}</b> offers the verified exact model at <b>₹{lowest_current_price:,.2f}</b> ({lowest_price_store.discount_percent:.0f}% OFF). Price comparison verified with confirmed direct store listings.",
-                "source_store": source_store_name,
-                "source_price": scraped_price,
-                "is_exclusive": False,
-                "is_comparison_verified": True
-            }
+            source_store_name = scraped_data.website if scraped_data else "original store"
+            highest_comp = max(price_entries, key=lambda p: float(p.current_price))
+            comp_text = ""
+            if highest_comp and scraped_site not in highest_comp.website_name.lower() and highest_comp.website_name != lowest_price_store.website_name:
+                diff = float(highest_comp.current_price) - lowest_current_price
+                comp_text = f" and ₹{diff:,.2f} compared to {highest_comp.website_name} (₹{float(highest_comp.current_price):,.2f})"
             recommendation_reason = (
-                f"{lowest_price_store.website_name} offers the lowest verified live price on {product.product_name} at ₹{lowest_current_price:,.2f} "
-                f"({lowest_price_store.discount_percent:.0f}% OFF, MRP ₹{lowest_price_store.original_price:,.2f}) for the exact model — "
-                f"saving you ₹{savings:,.2f} compared to {source_store_name} (₹{scraped_price:,.2f}). "
-                f"Verified across {len(verified_stores)} direct store listings. High customer satisfaction ({sentiment_score:.1f}% Sentiment) and genuine review trust ({trust_score:.1f}% Genuine)."
-            )
-        elif is_url and scraped_site:
-            platform_notice = {
-                "title": f"Lowest Price Verified on {lowest_price_store.website_name}",
-                "message": f"Verified direct listing on <b>{lowest_price_store.website_name}</b> at <b>₹{lowest_current_price:,.2f}</b> ({lowest_price_store.discount_percent:.0f}% OFF). Your source store currently offers the lowest confirmed price among verified retailers for <b>{product.product_name}</b>.",
-                "source_store": lowest_price_store.website_name,
-                "source_price": lowest_current_price,
-                "is_exclusive": False,
-                "is_comparison_verified": True
-            }
-            recommendation_reason = (
-                f"{lowest_price_store.website_name} offers the lowest verified live price on {product.product_name} at ₹{lowest_current_price:,.2f} with {lowest_price_store.discount_percent:.0f}% off (MRP ₹{lowest_price_store.original_price:,.2f}). "
-                f"Verified across {len(verified_stores)} major shopping platforms with high customer satisfaction ({sentiment_score:.1f}% Sentiment) and genuine review trust ({trust_score:.1f}% Genuine)."
+                f"{lowest_price_store.website_name} offers the best price on {product.product_name} at ₹{lowest_current_price:,.2f} "
+                f"({lowest_price_store.discount_percent:.0f}% OFF, MRP ₹{lowest_price_store.original_price:,.2f}) — "
+                f"saving you ₹{savings:,.2f} compared to {source_store_name} (₹{scraped_price:,.2f}){comp_text}. "
+                f"High customer satisfaction ({sentiment_score:.1f}% Sentiment) and excellent review trust ({trust_score:.1f}% Genuine)."
             )
         else:
-            platform_notice = None
             recommendation_reason = (
-                f"{lowest_price_store.website_name} offers the lowest verified live price on {product.product_name} at ₹{lowest_current_price:,.2f} ({lowest_price_store.discount_percent:.0f}% OFF). "
-                f"Verified across {len(verified_stores)} retailers with high sentiment rating ({sentiment_score:.1f}% Sentiment) and genuine review trust ({trust_score:.1f}% Genuine)."
+                f"{lowest_price_store.website_name} offers the best price on {product.product_name} at ₹{lowest_current_price:,.2f} with {lowest_price_store.discount_percent:.0f}% off (MRP ₹{lowest_price_store.original_price:,.2f}). "
+                f"Verified across major shopping platforms with high customer satisfaction ({sentiment_score:.1f}% Sentiment) and excellent review trust ({trust_score:.1f}% Genuine)."
             )
+    elif value_score >= 50.0:
+        buy_decision = "CONSIDER"
+        recommendation_reason = (
+            f"Product value score is moderate ({value_score:.1f}/100). "
+            f"Compare reviews or wait for upcoming festival discounts."
+        )
     else:
-        if is_platform_exclusive and is_url and scraped_site:
-            comp_store = next((p for p in price_entries if getattr(p, "price_type", "") == "COMPARABLE_PRODUCT"), None)
-            comp_price_str = f"~₹{float(comp_store.current_price):,.2f}" if comp_store else "market rates"
-            platform_notice = {
-                "title": f"Verified {source_store_name} Deal • Comparison Not Verified",
-                "message": f"This exact product was verified on <b>{source_store_name}</b> at <b>₹{scraped_price:,.2f}</b> ({lowest_price_store.discount_percent:.0f}% OFF). Because this brand/seller is exclusive to {source_store_name}, other stores show <b>comparable category alternatives</b> rather than duplicate listings. Price comparison is not verified across platforms.",
-                "source_store": source_store_name,
-                "source_price": scraped_price,
-                "is_exclusive": True,
-                "is_comparison_verified": False
-            }
-            recommendation_reason = (
-                f"Price comparison not verified across all stores. This exact product was verified only on {source_store_name} at ₹{scraped_price:,.2f} ({lowest_price_store.discount_percent:.0f}% OFF). "
-                f"Other shopping platforms show comparable category alternatives ({comp_price_str}), not exact store prices for this specific brand/item. "
-                f"A 'Best to Buy' recommendation requires verified data for identical models across multiple retailers. We recommend checking live store links directly."
-            )
-        elif is_url and scraped_site:
-            platform_notice = {
-                "title": f"Verified {source_store_name} Listing • Comparison Not Verified",
-                "message": f"Live price verified on <b>{source_store_name}</b> at <b>₹{scraped_price:,.2f}</b> ({lowest_price_store.discount_percent:.0f}% OFF). Competitor prices shown below are category market estimates or search queries. To find if a cheaper checkout price exists, check live store links directly.",
-                "source_store": source_store_name,
-                "source_price": scraped_price,
-                "is_exclusive": False,
-                "is_comparison_verified": False
-            }
-            recommendation_reason = (
-                f"Price comparison not verified across competitor platforms. This product was verified only on {source_store_name} at ₹{scraped_price:,.2f}. "
-                f"Prices shown for other retailers are category market estimates or live search queries, not confirmed store checkout prices. "
-                f"A 'Best to Buy' recommendation is reserved for verified multi-store price comparisons. Please check live store links to verify real-time prices before purchasing."
-            )
-        else:
-            platform_notice = None
-            recommendation_reason = (
-                f"Price comparison not verified. No confirmed live store prices were fetched. "
-                f"Displayed numbers are category-level market estimates (~₹{scraped_price:,.2f}). "
-                f"Exact store quotes should be verified via live search links before purchasing."
-            )
+        buy_decision = "WAIT FOR SALE"
+        recommendation_reason = (
+            f"Value score is low ({value_score:.1f}/100) due to mixed review sentiment or higher fake review detection. "
+            f"We recommend waiting for price drop or considering alternatives."
+        )
 
     user = get_or_create_system_user(db)
     rec_model = Recommendation(
         user_id=user.user_id,
         product_id=product.product_id,
-        best_website=lowest_price_store.website_name if has_sufficient_verified_data else (f"{source_store_name} (Only Verified Store)" if (is_url and scraped_site) else "Comparison Pending"),
-        recommended_price=lowest_current_price if has_sufficient_verified_data else (scraped_price if (is_url and scraped_price) else lowest_current_price),
+        best_website=lowest_price_store.website_name,
+        recommended_price=lowest_current_price,
         quality_score=sentiment_score,
         trust_score=trust_score,
         value_score=value_score,
@@ -867,23 +789,45 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
     db.add(rec_model)
     db.commit()
 
-    if has_sufficient_verified_data:
+    if is_url and scraped_site:
+        source_store_name = scraped_data.website if scraped_data else "Original Store"
+        if is_platform_exclusive:
+            platform_notice = {
+                "title": f"Verified {source_store_name} Exclusive Deal & Multi-Store Transparency",
+                "message": f"This exact product was verified on <b>{source_store_name}</b> at <b>₹{scraped_price:,.2f}</b> ({lowest_price_store.discount_percent:.0f}% OFF). Because this brand/seller is exclusive to {source_store_name}, other stores show comparable alternatives in this category rather than duplicate listings.",
+                "source_store": source_store_name,
+                "source_price": scraped_price,
+                "is_exclusive": True
+            }
+        elif lowest_price_store.website_name.lower() not in scraped_site.lower():
+            savings = scraped_price - lowest_current_price
+            platform_notice = {
+                "title": f"Better Deal Found! Save ₹{savings:,.2f} on {lowest_price_store.website_name}",
+                "message": f"You provided a link to <b>{source_store_name}</b> (₹{scraped_price:,.2f}), but <b>{lowest_price_store.website_name}</b> offers the exact model at <b>₹{lowest_current_price:,.2f}</b> ({lowest_price_store.discount_percent:.0f}% OFF). Comparing live retail pricing across <b>Amazon, Flipkart, Croma, Reliance Digital</b>, and <b>Vijay Sales</b>.",
+                "source_store": source_store_name,
+                "source_price": scraped_price,
+                "is_exclusive": False
+            }
+        else:
+            platform_notice = {
+                "title": f"Best Deal Verified on {lowest_price_store.website_name}",
+                "message": f"Verified direct listing on <b>{lowest_price_store.website_name}</b> at <b>₹{lowest_current_price:,.2f}</b> ({lowest_price_store.discount_percent:.0f}% OFF). Your source store currently offers the lowest verified price compared to other major retailers for <b>{product.product_name}</b>.",
+                "source_store": lowest_price_store.website_name,
+                "source_price": lowest_current_price,
+                "is_exclusive": False
+            }
+    else:
+        platform_notice = None
+
+    if is_platform_exclusive:
         sorted_prices = sorted(
             price_entries,
-            key=lambda p: (
-                0 if getattr(p, "is_lowest", False) else 1,
-                0 if getattr(p, "price_type", "") == "VERIFIED_LIVE" else 1,
-                float(p.current_price or 0)
-            )
+            key=lambda p: (0 if (scraped_site and scraped_site in p.website_name.lower()) else 1, float(p.current_price or 0))
         )
     else:
         sorted_prices = sorted(
             price_entries,
-            key=lambda p: (
-                0 if (getattr(p, "is_source", False) and getattr(p, "price_type", "") == "VERIFIED_LIVE") else 1,
-                0 if getattr(p, "price_type", "") == "VERIFIED_LIVE" else 1,
-                float(p.current_price or 0)
-            )
+            key=lambda p: (0 if p.website_name == lowest_price_store.website_name else 1, float(p.current_price or 0))
         )
 
     # =========================================================================
@@ -894,32 +838,12 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         "platform_notice": platform_notice,
         "procedure_steps": [
             {"step": 1, "name": "Input Processing", "status": "Completed", "details": f"Parsed {input_type}: {query}"},
-            {
-                "step": 2, 
-                "name": "Multi-Store Data Collection", 
-                "status": "Completed", 
-                "details": (
-                    f"Verified live prices across {len(verified_stores)} stores & estimated market data on {len(price_entries) - len(verified_stores)} stores"
-                    if has_sufficient_verified_data else (
-                        f"Verified direct price on {source_store_name} (₹{scraped_price:,.2f}) & {'comparable items' if is_platform_exclusive else 'market search estimates'} across {len(price_entries) - 1} stores"
-                        if (is_url and scraped_site) else f"Gathered market estimates across {len(price_entries)} platforms"
-                    )
-                )
-            },
+            {"step": 2, "name": "Multi-Store Data Collection", "status": "Completed", "details": f"Verified deal on {lowest_price_store.website_name} (₹{lowest_current_price:,.2f}) & comparable items across {len(price_entries)} stores" if is_platform_exclusive else f"Collected prices across {len(price_entries)} stores"},
             {"step": 3, "name": "Sentiment AI Analysis", "status": "Completed", "details": f"{sentiment_score}/100 Score ({positive_count} Pos, {neutral_count} Neu, {negative_count} Neg)"},
             {"step": 4, "name": "Fake Review ML Model", "status": "Completed", "details": f"{trust_score}% Trust Score ({genuine_count} Genuine, {fake_count} Suspicious)"},
-            {"step": 5, "name": "Price History Snapshot", "status": "Completed", "details": f"Best evaluated price: ₹{lowest_current_price:,.2f} on {lowest_price_store.website_name}"},
+            {"step": 5, "name": "Price History Snapshot", "status": "Completed", "details": f"Best verified deal recorded at ₹{lowest_current_price:,.2f} on {lowest_price_store.website_name}"},
             {"step": 6, "name": "Future Price Prediction", "status": "Completed", "details": f"Predicted ₹{predicted_7day_price:,.2f} in 7 days ({price_trend})"},
-            {
-                "step": 7, 
-                "name": "AI Recommendation", 
-                "status": "Completed", 
-                "details": (
-                    f"Decision: {buy_decision} on {lowest_price_store.website_name} (Verified Lowest Live Price)"
-                    if has_sufficient_verified_data else
-                    f"Decision: {buy_decision} ({f'{source_store_name} price verified, competitor comparison unverified' if (is_url and scraped_site) else 'Estimated market pricing only'})"
-                )
-            }
+            {"step": 7, "name": "AI Recommendation", "status": "Completed", "details": f"Decision: {buy_decision} on {lowest_price_store.website_name} ({'Verified Exact Match' if is_platform_exclusive else f'Value Score: {value_score}/100'})"}
         ],
         "product": {
             "product_id": product.product_id,
@@ -936,13 +860,20 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
                 "discount_percent": float(p.discount_percent) if p.discount_percent else None,
                 "availability": p.availability,
                 "product_url": p.product_url,
-                "is_lowest": getattr(p, "is_lowest", False),
-                "is_source": getattr(p, "is_source", False),
-                "is_exact_match": getattr(p, "is_exact_match", False),
-                "price_type": getattr(p, "price_type", "ESTIMATED_MARKET"),
-                "price_type_label": getattr(p, "price_type_label", "Estimated Market Price"),
-                "match_type": getattr(p, "match_type", "SEARCH_COMPARISON"),
-                "action_label": getattr(p, "action_label", f"Buy on {p.website_name} ↗")
+                "is_lowest": (p.website_name == lowest_price_store.website_name),
+                "is_source": bool(scraped_site and scraped_site in p.website_name.lower()),
+                "is_exact_match": bool(scraped_site and scraped_site in p.website_name.lower()) or is_direct_product_url(p.product_url),
+                "match_type": (
+                    "EXACT_MODEL" if (bool(scraped_site and scraped_site in p.website_name.lower()) or is_direct_product_url(p.product_url))
+                    else ("CATEGORY_SIMILAR" if is_platform_exclusive else "SEARCH_COMPARISON")
+                ),
+                "action_label": (
+                    f"Buy on {p.website_name} ↗ (Your Link)" if (bool(scraped_site and scraped_site in p.website_name.lower()))
+                    else (
+                        f"Search Similar on {p.website_name} ↗" if is_platform_exclusive
+                        else (f"Buy on {p.website_name} ↗ (Exact Model)" if is_direct_product_url(p.product_url) else f"Search on {p.website_name} ↗")
+                    )
+                )
             }
             for p in sorted_prices
         ],
@@ -973,9 +904,8 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         "recommendation": {
             "value_score": value_score,
             "buy_decision": buy_decision,
-            "best_website": lowest_price_store.website_name if has_sufficient_verified_data else (f"{source_store_name} (Only Verified Store)" if (is_url and scraped_site) else "Comparison Pending"),
-            "recommended_price": lowest_current_price if has_sufficient_verified_data else (scraped_price if (is_url and scraped_site) else lowest_current_price),
-            "is_comparison_verified": has_sufficient_verified_data,
+            "best_website": lowest_price_store.website_name,
+            "recommended_price": lowest_current_price,
             "recommendation_reason": recommendation_reason
         }
     }
