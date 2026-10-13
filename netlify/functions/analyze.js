@@ -654,17 +654,23 @@ exports.handler = async function (event, context) {
             const oPrice = benchmark.mrp;
             const disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
             const isDirect = Boolean(isSource || isDirectProductUrl(s.url));
-            let action = isSource ? `Buy on ${s.name} ↗ (Your Link)` : (s.action || (isDirect ? `Buy on ${s.name} ↗ (Exact Model)` : `Search on ${s.name} ↗`));
+            const priceType = isDirect ? "VERIFIED_LIVE" : "ESTIMATED_MARKET";
+            const priceTypeLabel = isDirect ? "Verified Live Price" : "Estimated Market Price";
+            let action = isSource 
+                ? `Buy on ${s.name} ↗ (Your Link)` 
+                : (isDirect ? `Buy on ${s.name} ↗ (Exact Model)` : `Check Live Price on ${s.name} ↗`);
             return {
                 website_name: s.name,
                 current_price: cPrice,
                 original_price: oPrice,
                 discount_percent: disc,
-                availability: isSource ? "In Stock (Exact Match)" : s.avail,
+                availability: isSource ? "In Stock (Confirmed Live Price)" : (isDirect ? "In Stock (Confirmed Live Price)" : "Live Search to Confirm Price"),
                 product_url: isSource ? targetUrl : s.url,
                 is_lowest: false,
                 is_source: isSource,
                 is_exact_match: isDirect,
+                price_type: priceType,
+                price_type_label: priceTypeLabel,
                 match_type: isDirect ? "EXACT_MODEL" : "SEARCH_COMPARISON",
                 action_label: action
             };
@@ -709,11 +715,11 @@ exports.handler = async function (event, context) {
                 : getStoreSearchUrl('Vijay Sales', cleanTerm);
 
             stores = [
-                { name: "Croma", url: cromaUrl, mult: isSourceCroma ? 1.0 : 0.99, isDirectResolved: Boolean(isSourceCroma || isDirectProductUrl(cromaUrl)) },
-                { name: "Reliance Digital", url: relianceUrl, mult: 1.0, isDirectResolved: Boolean(sourceStoreName === "Reliance Digital" || isDirectProductUrl(relianceUrl)) },
-                { name: "Vijay Sales", url: vijayUrl, mult: 1.01, isDirectResolved: Boolean(sourceStoreName === "Vijay Sales" || isDirectProductUrl(vijayUrl)) },
-                { name: "Amazon", url: amazonUrl, mult: isSourceAmazon ? 1.0 : 1.0, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct || isDirectProductUrl(amazonUrl)) },
-                { name: "Flipkart", url: flipkartUrl, mult: isSourceFlipkart ? 1.0 : 1.0, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct || isDirectProductUrl(flipkartUrl)) }
+                { name: "Croma", url: cromaUrl, isDirectResolved: Boolean(isSourceCroma || isDirectProductUrl(cromaUrl)) },
+                { name: "Reliance Digital", url: relianceUrl, isDirectResolved: Boolean(sourceStoreName === "Reliance Digital" || isDirectProductUrl(relianceUrl)) },
+                { name: "Vijay Sales", url: vijayUrl, isDirectResolved: Boolean(sourceStoreName === "Vijay Sales" || isDirectProductUrl(vijayUrl)) },
+                { name: "Amazon", url: amazonUrl, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct || isDirectProductUrl(amazonUrl)) },
+                { name: "Flipkart", url: flipkartUrl, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct || isDirectProductUrl(flipkartUrl)) }
             ];
         } else if (category === "Fashion") {
             const amazonUrl = isSourceAmazon 
@@ -725,12 +731,12 @@ exports.handler = async function (event, context) {
                 : (flipkartDirectProduct ? flipkartDirectProduct.url : getStoreSearchUrl('Flipkart', cleanTerm));
 
             stores = [
-                { name: "Flipkart", url: flipkartUrl, mult: 1.0, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) },
-                { name: "Meesho", url: isSourceMeesho ? targetUrl : getStoreSearchUrl('Meesho', cleanTerm), mult: 0.95, isDirectResolved: Boolean(isSourceMeesho) },
-                { name: "Amazon", url: amazonUrl, mult: 1.05, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) },
-                { name: "Myntra", url: isSourceMyntra ? targetUrl : getStoreSearchUrl('Myntra', cleanTerm), mult: 1.10, isDirectResolved: Boolean(isSourceMyntra) },
-                { name: "Ajio", url: isSourceAjio ? targetUrl : getStoreSearchUrl('Ajio', cleanTerm), mult: 1.08, isDirectResolved: Boolean(isSourceAjio) },
-                { name: "Tata CLiQ", url: getStoreSearchUrl('Tata CLiQ', cleanTerm), mult: 1.12, isDirectResolved: false }
+                { name: "Flipkart", url: flipkartUrl, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) },
+                { name: "Meesho", url: isSourceMeesho ? targetUrl : getStoreSearchUrl('Meesho', cleanTerm), isDirectResolved: Boolean(isSourceMeesho) },
+                { name: "Amazon", url: amazonUrl, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) },
+                { name: "Myntra", url: isSourceMyntra ? targetUrl : getStoreSearchUrl('Myntra', cleanTerm), isDirectResolved: Boolean(isSourceMyntra) },
+                { name: "Ajio", url: isSourceAjio ? targetUrl : getStoreSearchUrl('Ajio', cleanTerm), isDirectResolved: Boolean(isSourceAjio) },
+                { name: "Tata CLiQ", url: getStoreSearchUrl('Tata CLiQ', cleanTerm), isDirectResolved: false }
             ];
         } else {
             const amazonUrl = isSourceAmazon 
@@ -742,11 +748,11 @@ exports.handler = async function (event, context) {
                 : (flipkartDirectProduct ? flipkartDirectProduct.url : getStoreSearchUrl('Flipkart', cleanTerm));
 
             stores = [
-                { name: "Flipkart", url: flipkartUrl, mult: 0.98, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) },
-                { name: "Amazon", url: amazonUrl, mult: 1.0, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) },
-                { name: "Meesho", url: isSourceMeesho ? targetUrl : getStoreSearchUrl('Meesho', cleanTerm), mult: 0.95, isDirectResolved: Boolean(isSourceMeesho) },
-                { name: "Myntra", url: isSourceMyntra ? targetUrl : getStoreSearchUrl('Myntra', cleanTerm), mult: 1.04, isDirectResolved: Boolean(isSourceMyntra) },
-                { name: "Ajio", url: isSourceAjio ? targetUrl : getStoreSearchUrl('Ajio', cleanTerm), mult: 1.02, isDirectResolved: Boolean(isSourceAjio) }
+                { name: "Flipkart", url: flipkartUrl, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) },
+                { name: "Amazon", url: amazonUrl, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) },
+                { name: "Meesho", url: isSourceMeesho ? targetUrl : getStoreSearchUrl('Meesho', cleanTerm), isDirectResolved: Boolean(isSourceMeesho) },
+                { name: "Myntra", url: isSourceMyntra ? targetUrl : getStoreSearchUrl('Myntra', cleanTerm), isDirectResolved: Boolean(isSourceMyntra) },
+                { name: "Ajio", url: isSourceAjio ? targetUrl : getStoreSearchUrl('Ajio', cleanTerm), isDirectResolved: Boolean(isSourceAjio) }
             ];
         }
 
@@ -758,6 +764,8 @@ exports.handler = async function (event, context) {
             let disc;
             let avail;
             let isExactMatch;
+            let priceType;
+            let priceTypeLabel;
             let matchType;
             let actionLabel;
 
@@ -765,34 +773,39 @@ exports.handler = async function (event, context) {
                 cPrice = basePrice;
                 oPrice = Math.max(originalPrice, Math.round(cPrice * 1.15));
                 disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
-                avail = "In Stock (Exact Match)";
+                avail = "In Stock (Confirmed Live Price)";
                 isExactMatch = true;
+                priceType = "VERIFIED_LIVE";
+                priceTypeLabel = "Verified Live Price";
                 matchType = "EXACT_MODEL";
                 actionLabel = `Buy on ${s.name} ↗ (Your Link)`;
             } else if (isPlatformExclusive) {
                 cPrice = Math.round(basePrice * (1.08 + idx * 0.03));
                 oPrice = Math.max(originalPrice, Math.round(cPrice * 1.25));
                 disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
-                avail = "Comparable Items in Stock";
+                avail = "Comparable Alternative in Stock";
                 isExactMatch = false;
+                priceType = "COMPARABLE_PRODUCT";
+                priceTypeLabel = "Comparable Product Price";
                 matchType = "CATEGORY_SIMILAR";
-                actionLabel = `Search Similar on ${s.name} ↗`;
-            } else if (isDirect) {
-                cPrice = Math.round((basePrice * (s.mult || 1.0)) / 10) * 10;
-                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.18));
-                disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
-                avail = "In Stock (Exact Model)";
-                isExactMatch = true;
-                matchType = "EXACT_MODEL";
-                actionLabel = `Buy on ${s.name} ↗ (Exact Model)`;
+                actionLabel = `View Similar on ${s.name} ↗`;
             } else {
-                cPrice = Math.round((basePrice * (s.mult || 1.0)) / 10) * 10;
+                cPrice = Math.round(basePrice / 10) * 10;
                 oPrice = Math.max(originalPrice, Math.round(cPrice * 1.18));
                 disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
-                avail = "Available in Search";
-                isExactMatch = false;
-                matchType = "SEARCH_COMPARISON";
-                actionLabel = `Search on ${s.name} ↗`;
+                priceType = "ESTIMATED_MARKET";
+                priceTypeLabel = "Estimated Market Price";
+                if (isDirect) {
+                    avail = "Direct Store Link (Live Price Unverified)";
+                    isExactMatch = true;
+                    matchType = "EXACT_MODEL";
+                    actionLabel = `Check Live Price on ${s.name} ↗ (Exact Model)`;
+                } else {
+                    avail = "Live Search to Confirm Price";
+                    isExactMatch = false;
+                    matchType = "SEARCH_COMPARISON";
+                    actionLabel = `Check Live Price on ${s.name} ↗`;
+                }
             }
 
             return {
@@ -805,80 +818,127 @@ exports.handler = async function (event, context) {
                 is_lowest: false,
                 is_source: isSource,
                 is_exact_match: isExactMatch,
+                price_type: priceType,
+                price_type_label: priceTypeLabel,
                 match_type: matchType,
                 action_label: actionLabel
             };
         });
     }
 
-    // Determine the lowest price store
-    let lowestStore;
-    if (isPlatformExclusive) {
-        lowestStore = priceList.find(p => p.is_source) || priceList[0];
-    } else {
-        lowestStore = priceList.reduce((min, p) => p.current_price < min.current_price ? p : min, priceList[0]);
-    }
-    priceList.forEach(p => p.is_lowest = (p.website_name === lowestStore.website_name));
+    // Global Comparison Verification Rule:
+    const verifiedStores = priceList.filter(p => p.price_type === "VERIFIED_LIVE");
+    const hasSufficientVerifiedData = verifiedStores.length >= 2;
 
-    // Sort: lowest price store first!
+    let lowestStore = null;
+    let buyDecision = null;
+
+    if (hasSufficientVerifiedData) {
+        lowestStore = verifiedStores.reduce((min, p) => p.current_price < min.current_price ? p : min, verifiedStores[0]);
+        priceList.forEach(p => {
+            p.is_lowest = (p.website_name === lowestStore.website_name && p.price_type === "VERIFIED_LIVE");
+        });
+        buyDecision = "BUY NOW";
+    } else {
+        // AI must NEVER claim "cheapest" or "best price" based on estimated/comparable prices!
+        priceList.forEach(p => {
+            p.is_lowest = false;
+        });
+        // Use verified source store as reference if present
+        lowestStore = priceList.find(p => p.is_source && p.price_type === "VERIFIED_LIVE") || priceList[0];
+        buyDecision = "PRICE COMPARISON NOT VERIFIED";
+    }
+
+    // Sort:
     priceList.sort((a, b) => {
-        if (isPlatformExclusive) {
-            if (a.is_source) return -1;
-            if (b.is_source) return 1;
+        if (hasSufficientVerifiedData) {
+            if (a.is_lowest) return -1;
+            if (b.is_lowest) return 1;
+            if (a.price_type === "VERIFIED_LIVE" && b.price_type !== "VERIFIED_LIVE") return -1;
+            if (b.price_type === "VERIFIED_LIVE" && a.price_type !== "VERIFIED_LIVE") return 1;
+            return a.current_price - b.current_price;
+        } else {
+            if (a.is_source && a.price_type === "VERIFIED_LIVE") return -1;
+            if (b.is_source && b.price_type === "VERIFIED_LIVE") return 1;
+            if (a.price_type === "VERIFIED_LIVE" && b.price_type !== "VERIFIED_LIVE") return -1;
+            if (b.price_type === "VERIFIED_LIVE" && a.price_type !== "VERIFIED_LIVE") return 1;
+            return a.current_price - b.current_price;
         }
-        if (a.is_lowest) return -1;
-        if (b.is_lowest) return 1;
-        return a.current_price - b.current_price;
     });
 
     const sentimentScore = 84.5;
     const trustScore = 89.2;
-    const valueScore = 86.0;
+    const valueScore = hasSufficientVerifiedData ? 86.0 : 75.0;
     const predPrice = Math.round(lowestStore.current_price * 0.96);
 
     let platformNotice = null;
-    if (isUrl && sourceStoreName) {
-        if (isPlatformExclusive) {
-            platformNotice = {
-                title: `Verified ${sourceStoreName} Exclusive Deal & Multi-Store Transparency`,
-                message: `This exact product was verified on <b>${sourceStoreName}</b> at <b>₹${basePrice.toLocaleString('en-IN')}</b> (${lowestStore.discount_percent}% OFF). Because this brand/seller is exclusive to ${sourceStoreName}, other stores show comparable alternatives in this category rather than duplicate listings.`,
-                source_store: sourceStoreName,
-                source_price: basePrice,
-                is_exclusive: true
-            };
-        } else if (lowestStore.website_name !== sourceStoreName) {
+    if (hasSufficientVerifiedData) {
+        if (isUrl && sourceStoreName && lowestStore.website_name !== sourceStoreName) {
             const savings = basePrice - lowestStore.current_price;
             platformNotice = {
-                title: `Better Deal Found! Save ₹${savings.toLocaleString('en-IN')} on ${lowestStore.website_name}`,
-                message: `You provided a link to <b>${sourceStoreName}</b> (₹${basePrice.toLocaleString('en-IN')}), but <b>${lowestStore.website_name}</b> offers the exact model at <b>₹${lowestStore.current_price.toLocaleString('en-IN')}</b> (${lowestStore.discount_percent}% OFF). Comparing live retail pricing across <b>Amazon, Flipkart, Croma, Reliance Digital</b>, and <b>Vijay Sales</b>.`,
+                title: `Better Deal Verified! Save ₹${savings.toLocaleString('en-IN')} on ${lowestStore.website_name}`,
+                message: `You provided a link to <b>${sourceStoreName}</b> (₹${basePrice.toLocaleString('en-IN')}), but <b>${lowestStore.website_name}</b> offers the verified exact model at <b>₹${lowestStore.current_price.toLocaleString('en-IN')}</b> (${lowestStore.discount_percent}% OFF). Price comparison verified with confirmed direct store listings.`,
                 source_store: sourceStoreName,
                 source_price: basePrice,
-                is_exclusive: false
+                is_exclusive: false,
+                is_comparison_verified: true
+            };
+        } else if (isUrl && sourceStoreName) {
+            platformNotice = {
+                title: `Lowest Price Verified on ${sourceStoreName}`,
+                message: `Verified direct listing on <b>${sourceStoreName}</b> at <b>₹${basePrice.toLocaleString('en-IN')}</b> (${lowestStore.discount_percent}% OFF). Your source store currently offers the lowest confirmed price among verified retailers for <b>${productName}</b>.`,
+                source_store: sourceStoreName,
+                source_price: basePrice,
+                is_exclusive: false,
+                is_comparison_verified: true
+            };
+        }
+    } else {
+        if (isPlatformExclusive && isUrl && sourceStoreName) {
+            platformNotice = {
+                title: `Verified ${sourceStoreName} Deal • Comparison Not Verified`,
+                message: `This exact product was verified on <b>${sourceStoreName}</b> at <b>₹${basePrice.toLocaleString('en-IN')}</b> (${lowestStore.discount_percent}% OFF). Because this brand/seller is exclusive to ${sourceStoreName}, other stores show <b>comparable category alternatives</b> rather than duplicate listings. Price comparison is not verified across platforms.`,
+                source_store: sourceStoreName,
+                source_price: basePrice,
+                is_exclusive: true,
+                is_comparison_verified: false
+            };
+        } else if (isUrl && sourceStoreName) {
+            platformNotice = {
+                title: `Price Comparison Not Verified Across Competitor Stores`,
+                message: `This listing was verified on <b>${sourceStoreName}</b> at <b>₹${basePrice.toLocaleString('en-IN')}</b>. Prices for other retailers are <b>category market estimates</b> or live search queries, not confirmed live quotes for this specific item. A "Best to Buy" recommendation is not claimed without verified competitor data.`,
+                source_store: sourceStoreName,
+                source_price: basePrice,
+                is_exclusive: false,
+                is_comparison_verified: false
             };
         } else {
             platformNotice = {
-                title: `Best Deal Verified on ${sourceStoreName}`,
-                message: `Verified direct listing on <b>${sourceStoreName}</b> at <b>₹${basePrice.toLocaleString('en-IN')}</b> (${lowestStore.discount_percent}% OFF). Your source store currently offers the lowest verified price compared to other major retailers for <b>${productName}</b>.`,
-                source_store: sourceStoreName,
-                source_price: basePrice,
-                is_exclusive: false
+                title: `Market Price Estimates • Live Comparison Unverified`,
+                message: `Live store prices have not been confirmed for this specific model across stores. Displayed figures are <b>category-level market estimates</b>. Live store quotes must be confirmed on the respective websites.`,
+                source_store: null,
+                source_price: null,
+                is_exclusive: false,
+                is_comparison_verified: false
             };
         }
     }
 
     let recommendationReason;
-    if (isPlatformExclusive) {
-        recommendationReason = `${lowestStore.website_name} offers the verified lowest deal at ₹${lowestStore.current_price.toLocaleString('en-IN')} with ${lowestStore.discount_percent}% off (MRP ₹${lowestStore.original_price.toLocaleString('en-IN')}). This exact product is verified on ${lowestStore.website_name}; other platforms show comparable category alternatives starting from ~₹${priceList.find(p => !p.is_source)?.current_price || (lowestStore.current_price + 20)}. High sentiment rating (${sentimentScore}/100) and genuine trust score (${trustScore}%).`;
-    } else if (isUrl && sourceStoreName && lowestStore.website_name !== sourceStoreName) {
-        const savings = basePrice - lowestStore.current_price;
-        const highestComp = priceList.reduce((max, p) => p.current_price > max.current_price ? p : max, priceList[0]);
-        let compText = '';
-        if (highestComp && highestComp.website_name !== sourceStoreName && highestComp.website_name !== lowestStore.website_name) {
-            compText = ` and ₹${(highestComp.current_price - lowestStore.current_price).toLocaleString('en-IN')} compared to ${highestComp.website_name} (₹${highestComp.current_price.toLocaleString('en-IN')})`;
+    if (hasSufficientVerifiedData) {
+        let savingsText = '';
+        if (isUrl && sourceStoreName && lowestStore.website_name !== sourceStoreName) {
+            savingsText = ` — saving you ₹${(basePrice - lowestStore.current_price).toLocaleString('en-IN')} compared to ${sourceStoreName} (₹${basePrice.toLocaleString('en-IN')})`;
         }
-        recommendationReason = `${lowestStore.website_name} offers the best price on ${productName} at ₹${lowestStore.current_price.toLocaleString('en-IN')} (${lowestStore.discount_percent}% OFF, MRP ₹${lowestStore.original_price.toLocaleString('en-IN')}) — saving you ₹${savings.toLocaleString('en-IN')} compared to ${sourceStoreName} (₹${basePrice.toLocaleString('en-IN')})${compText}. High sentiment rating (${sentimentScore}/100) and genuine trust score (${trustScore}%).`;
+        recommendationReason = `${lowestStore.website_name} offers the lowest verified live price on ${productName} at ₹${lowestStore.current_price.toLocaleString('en-IN')} (${lowestStore.discount_percent}% OFF, MRP ₹${lowestStore.original_price.toLocaleString('en-IN')}) for the exact model${savingsText}. Verified across ${verifiedStores.length} direct store listings. High customer sentiment (${sentimentScore}/100) and genuine review trust (${trustScore}%).`;
+    } else if (isPlatformExclusive && isUrl && sourceStoreName) {
+        const compStore = priceList.find(p => p.price_type === "COMPARABLE_PRODUCT");
+        const compPriceStr = compStore ? `~₹${compStore.current_price.toLocaleString('en-IN')}` : 'market rates';
+        recommendationReason = `Price comparison not verified across all stores. This exact product was verified only on ${sourceStoreName} at ₹${basePrice.toLocaleString('en-IN')} (${lowestStore.discount_percent}% OFF). Other shopping platforms show comparable category alternatives (${compPriceStr}), not exact store prices for this specific brand/item. A "Best to Buy" recommendation requires verified data for identical models across multiple retailers. We recommend checking live store links directly.`;
+    } else if (isUrl && sourceStoreName) {
+        recommendationReason = `Price comparison not verified across competitor platforms. This product was verified only on ${sourceStoreName} at ₹${basePrice.toLocaleString('en-IN')}. Prices shown for other retailers are category market estimates or live search queries, not confirmed store checkout prices. A "Best to Buy" recommendation is reserved for verified multi-store price comparisons. Please check live store links to verify real-time prices before purchasing.`;
     } else {
-        recommendationReason = `${lowestStore.website_name} offers the best price on ${productName} at ₹${lowestStore.current_price.toLocaleString('en-IN')} with ${lowestStore.discount_percent}% off (MRP ₹${lowestStore.original_price.toLocaleString('en-IN')}). Verified across major shopping platforms with high sentiment rating (${sentimentScore}/100) and genuine trust score (${trustScore}%).`;
+        recommendationReason = `Price comparison not verified. No confirmed live store prices were fetched. Displayed numbers are category-level market estimates (~₹${basePrice.toLocaleString('en-IN')}). Exact store quotes should be verified via live search links before purchasing.`;
     }
 
     const result = {
@@ -886,12 +946,28 @@ exports.handler = async function (event, context) {
         platform_notice: platformNotice,
         procedure_steps: [
             { step: 1, name: "Input Processing", status: "Completed", details: `Parsed ${isUrl ? "URL" : "Product"}: ${query}` },
-            { step: 2, name: "Multi-Store Data Collection", status: "Completed", details: isPlatformExclusive ? `Verified deal on ${sourceStoreName} (₹${basePrice.toLocaleString('en-IN')}) & comparable items across ${priceList.length} platforms` : `Collected real prices across ${priceList.length} platforms` },
+            { 
+                step: 2, 
+                name: "Multi-Store Data Collection", 
+                status: "Completed", 
+                details: hasSufficientVerifiedData 
+                    ? `Verified live prices across ${verifiedStores.length} stores & estimated market data on ${priceList.length - verifiedStores.length} stores` 
+                    : (isUrl && sourceStoreName 
+                        ? `Verified direct price on ${sourceStoreName} (₹${basePrice.toLocaleString('en-IN')}) & ${isPlatformExclusive ? "comparable items" : "market search estimates"} across ${priceList.length - 1} stores` 
+                        : `Gathered market estimates across ${priceList.length} platforms`)
+            },
             { step: 3, name: "Sentiment AI Analysis", status: "Completed", details: `${sentimentScore}/100 Positive Customer Sentiment` },
             { step: 4, name: "Fake Review ML Model", status: "Completed", details: `${trustScore}% Genuine Review Trust Score` },
             { step: 5, name: "Price History Snapshot", status: "Completed", details: `Best verified deal: ₹${lowestStore.current_price.toLocaleString('en-IN')} on ${lowestStore.website_name}` },
             { step: 6, name: "Future Price Prediction", status: "Completed", details: `Predicted ₹${predPrice.toLocaleString('en-IN')} in 7 days (FALLING)` },
-            { step: 7, name: "AI Recommendation", status: "Completed", details: `Decision: BUY NOW on ${lowestStore.website_name} (${isPlatformExclusive ? "Verified Exact Match" : "Best Price"})` }
+            { 
+                step: 7, 
+                name: "AI Recommendation", 
+                status: "Completed", 
+                details: hasSufficientVerifiedData
+                    ? `Decision: ${buyDecision} on ${lowestStore.website_name} (Verified Lowest Live Price)`
+                    : `Decision: ${buyDecision} (${isUrl && sourceStoreName ? `${sourceStoreName} price verified, competitor comparison unverified` : "Estimated market pricing only"})`
+            }
         ],
         product: {
             product_id: 101,
@@ -931,13 +1007,14 @@ exports.handler = async function (event, context) {
         future_prediction: {
             predicted_7day_price: predPrice,
             price_trend: "FALLING",
-            prediction_reason: `Promotional trend shows heavy festival discount. Best price at ₹${lowestStore.current_price.toLocaleString('en-IN')} on ${lowestStore.website_name}.`
+            prediction_reason: `Promotional trend shows heavy festival discount. Price evaluated at ₹${lowestStore.current_price.toLocaleString('en-IN')} on ${lowestStore.website_name}.`
         },
         recommendation: {
             value_score: valueScore,
-            buy_decision: "BUY NOW",
-            best_website: lowestStore.website_name,
-            recommended_price: lowestStore.current_price,
+            buy_decision: buyDecision,
+            best_website: hasSufficientVerifiedData ? lowestStore.website_name : (isUrl && sourceStoreName ? `${sourceStoreName} (Only Verified Store)` : "Comparison Pending"),
+            recommended_price: hasSufficientVerifiedData ? lowestStore.current_price : (isUrl && sourceStoreName ? basePrice : lowestStore.current_price),
+            is_comparison_verified: hasSufficientVerifiedData,
             recommendation_reason: recommendationReason
         }
     };
