@@ -107,30 +107,30 @@
 
                     <div class="dashboard-header">
                         <div>
-                            <small>AI MULTI-STORE ANALYSIS</small>
-                            <h3>Smart Shopping Intelligence</h3>
+                            <small id="heroCardTag">AI MULTI-STORE ANALYSIS</small>
+                            <h3 id="heroCardTitle">Smart Shopping Intelligence</h3>
                         </div>
 
-                        <div class="status-dot">
+                        <div class="status-dot" id="heroStatusDot" title="AI Engine Ready">
                             ●
                         </div>
                     </div>
 
                     <div class="score-section">
 
-                        <div class="score-circle">
+                        <div class="score-circle" id="heroScoreCircle" style="background: radial-gradient(circle, #11162a 58%, transparent 59%), conic-gradient(#8b5cf6 0%, #272d43 0);">
                             <div>
-                                <strong id="heroValueScore">86</strong>
+                                <strong id="heroValueScore">--</strong>
                                 <span>/100</span>
                             </div>
                         </div>
 
                         <div class="score-info">
                             <h4>Value Score</h4>
-                            <p id="heroValueSubtitle">Optimal overall selection</p>
+                            <p id="heroValueSubtitle" style="color: #94a3b8;">Enter product link or name</p>
 
                             <div class="mini-bar">
-                                <div id="heroScoreBar" style="width: 86%;"></div>
+                                <div id="heroScoreBar" style="width: 0%;"></div>
                             </div>
                         </div>
 
@@ -143,7 +143,7 @@
                             <span>💰</span>
                             <div>
                                 <small>Best Price</small>
-                                <strong id="heroBestPrice">₹709</strong>
+                                <strong id="heroBestPrice">₹ --</strong>
                             </div>
                         </div>
 
@@ -151,7 +151,7 @@
                             <span>⭐</span>
                             <div>
                                 <small>Sentiment</small>
-                                <strong id="heroSentiment">Positive</strong>
+                                <strong id="heroSentiment">Standby</strong>
                             </div>
                         </div>
 
@@ -159,7 +159,7 @@
                             <span>🛡️</span>
                             <div>
                                 <small>Trust Score</small>
-                                <strong id="heroTrustScore">82% Genuine</strong>
+                                <strong id="heroTrustScore">--%</strong>
                             </div>
                         </div>
 
@@ -167,21 +167,21 @@
                             <span>📈</span>
                             <div>
                                 <small>Price Trend</small>
-                                <strong id="heroPriceTrend">Falling 📉</strong>
+                                <strong id="heroPriceTrend">Waiting...</strong>
                             </div>
                         </div>
 
                     </div>
 
-                    <div class="recommendation-box">
+                    <div class="recommendation-box" id="heroRecBox">
 
-                        <div class="recommendation-icon">
-                            ✓
+                        <div class="recommendation-icon" id="heroDecisionIcon">
+                            ⚡
                         </div>
 
                         <div>
                             <small>AI Recommendation</small>
-                            <strong id="heroDecision">BUY NOW</strong>
+                            <strong id="heroDecision">READY TO ANALYZE</strong>
                         </div>
 
                     </div>

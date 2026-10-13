@@ -86,6 +86,7 @@ async function searchProduct() {
 
     // Reset Stepper Cards
     resetStepperUI();
+    setHeroCardAnalyzing();
 
     try {
         // Step 1: Input Received
@@ -167,10 +168,61 @@ function delay(ms) {
 }
 
 
+function setHeroCardAnalyzing() {
+    const heroDecision = document.getElementById("heroDecision");
+    if (heroDecision) heroDecision.textContent = "ANALYZING...";
+    const heroDecisionIcon = document.getElementById("heroDecisionIcon");
+    if (heroDecisionIcon) heroDecisionIcon.textContent = "🔄";
+    const heroValueSubtitle = document.getElementById("heroValueSubtitle");
+    if (heroValueSubtitle) heroValueSubtitle.textContent = "Scanning stores & evaluating reviews...";
+    const heroSentiment = document.getElementById("heroSentiment");
+    if (heroSentiment) heroSentiment.textContent = "Analyzing...";
+    const heroPriceTrend = document.getElementById("heroPriceTrend");
+    if (heroPriceTrend) heroPriceTrend.textContent = "Checking...";
+}
+
+function resetHeroCard() {
+    const heroValueScore = document.getElementById("heroValueScore");
+    if (heroValueScore) heroValueScore.textContent = "--";
+
+    const heroScoreBar = document.getElementById("heroScoreBar");
+    if (heroScoreBar) heroScoreBar.style.width = "0%";
+
+    const heroScoreCircle = document.getElementById("heroScoreCircle");
+    if (heroScoreCircle) {
+        heroScoreCircle.style.background = "radial-gradient(circle, #11162a 58%, transparent 59%), conic-gradient(#8b5cf6 0%, #272d43 0)";
+    }
+
+    const heroValueSubtitle = document.getElementById("heroValueSubtitle");
+    if (heroValueSubtitle) {
+        heroValueSubtitle.textContent = "Enter product link or name";
+        heroValueSubtitle.style.color = "#94a3b8";
+    }
+
+    const heroBestPrice = document.getElementById("heroBestPrice");
+    if (heroBestPrice) heroBestPrice.textContent = "₹ --";
+
+    const heroSentiment = document.getElementById("heroSentiment");
+    if (heroSentiment) heroSentiment.textContent = "Standby";
+
+    const heroTrustScore = document.getElementById("heroTrustScore");
+    if (heroTrustScore) heroTrustScore.textContent = "--%";
+
+    const heroPriceTrend = document.getElementById("heroPriceTrend");
+    if (heroPriceTrend) heroPriceTrend.textContent = "Waiting...";
+
+    const heroDecision = document.getElementById("heroDecision");
+    if (heroDecision) heroDecision.textContent = "READY TO ANALYZE";
+
+    const heroDecisionIcon = document.getElementById("heroDecisionIcon");
+    if (heroDecisionIcon) heroDecisionIcon.textContent = "⚡";
+}
+
 function resetSearch() {
     searchInput.value = "";
     procedureSection.style.display = "none";
     analysisSection.style.display = "none";
+    resetHeroCard();
     window.scrollTo({ top: 0, behavior: "smooth" });
     searchInput.focus();
 }
@@ -186,13 +238,43 @@ function renderDashboard(data) {
     const hist = data.price_history;
 
     // 1. Update Hero Visual Card
-    document.getElementById("heroValueScore").textContent = Math.round(rec.value_score);
-    document.getElementById("heroScoreBar").style.width = `${rec.value_score}%`;
-    document.getElementById("heroBestPrice").textContent = `₹${rec.recommended_price.toLocaleString('en-IN')}`;
-    document.getElementById("heroSentiment").textContent = sent.sentiment_score >= 60 ? "Positive" : (sent.sentiment_score >= 40 ? "Neutral" : "Negative");
-    document.getElementById("heroTrustScore").textContent = `${fake.trust_score}% Genuine`;
-    document.getElementById("heroPriceTrend").textContent = pred.price_trend === "FALLING" ? "Falling 📉" : (pred.price_trend === "RISING" ? "Rising 📈" : "Stable ➡️");
-    document.getElementById("heroDecision").textContent = rec.buy_decision;
+    const scoreVal = Math.round(rec.value_score);
+    const heroValueScore = document.getElementById("heroValueScore");
+    if (heroValueScore) heroValueScore.textContent = scoreVal;
+
+    const heroScoreBar = document.getElementById("heroScoreBar");
+    if (heroScoreBar) heroScoreBar.style.width = `${rec.value_score}%`;
+
+    const heroScoreCircle = document.getElementById("heroScoreCircle");
+    if (heroScoreCircle) {
+        heroScoreCircle.style.background = `radial-gradient(circle, #11162a 58%, transparent 59%), conic-gradient(#8b5cf6 ${scoreVal}%, #272d43 0)`;
+    }
+
+    const heroValueSubtitle = document.getElementById("heroValueSubtitle");
+    if (heroValueSubtitle) {
+        heroValueSubtitle.textContent = scoreVal >= 80 ? "Optimal overall selection" : (scoreVal >= 60 ? "Good value purchase" : "Consider alternatives");
+        heroValueSubtitle.style.color = "#34d399";
+    }
+
+    const heroBestPrice = document.getElementById("heroBestPrice");
+    if (heroBestPrice) heroBestPrice.textContent = `₹${rec.recommended_price.toLocaleString('en-IN')}`;
+
+    const heroSentiment = document.getElementById("heroSentiment");
+    if (heroSentiment) heroSentiment.textContent = sent.sentiment_score >= 60 ? "Positive" : (sent.sentiment_score >= 40 ? "Neutral" : "Negative");
+
+    const heroTrustScore = document.getElementById("heroTrustScore");
+    if (heroTrustScore) heroTrustScore.textContent = `${fake.trust_score}% Genuine`;
+
+    const heroPriceTrend = document.getElementById("heroPriceTrend");
+    if (heroPriceTrend) heroPriceTrend.textContent = pred.price_trend === "FALLING" ? "Falling 📉" : (pred.price_trend === "RISING" ? "Rising 📈" : "Stable ➡️");
+
+    const heroDecision = document.getElementById("heroDecision");
+    if (heroDecision) heroDecision.textContent = rec.buy_decision;
+
+    const heroDecisionIcon = document.getElementById("heroDecisionIcon");
+    if (heroDecisionIcon) {
+        heroDecisionIcon.textContent = rec.buy_decision === "BUY NOW" ? "✓" : (rec.buy_decision === "WAIT FOR SALE" ? "⏳" : "⚠️");
+    }
 
     // 2. Recommendation Hero Card
     document.getElementById("analysisProductName").textContent = prod.product_name;
