@@ -59,6 +59,31 @@ def extract_price_from_text(text: str) -> Optional[float]:
     return None
 
 
+def is_invalid_title(title: Optional[str]) -> bool:
+    if not title or not isinstance(title, str):
+        return True
+    t = title.strip().lower()
+    if len(t) < 3:
+        return True
+    invalid_patterns = [
+        'access denied', '403 forbidden', '404', 'page not found', 'not found',
+        'robot check', 'attention required', 'security check', 'cloudflare',
+        'just a moment', 'verify you are human', 'are you a human', 'bot verification',
+        'enable cookies', 'captcha', 'bad request', 'internal server error',
+        'something went wrong', 'online electronic shopping store', 'online shopping site',
+        'online shopping india', 'shopping site in india', 'buy products online'
+    ]
+    if any(p in t for p in invalid_patterns):
+        return True
+    store_names = [
+        'reliance digital', 'croma', 'vijay sales', 'amazon', 'flipkart',
+        'myntra', 'ajio', 'meesho', 'tata cliq'
+    ]
+    if any(t == s or t == f"{s}.com" or t == f"{s}.in" for s in store_names):
+        return True
+    return False
+
+
 def fetch_html_content(url: str) -> Optional[str]:
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -133,7 +158,9 @@ def scrape_universal_product(url: str, html_content: Optional[str] = None) -> Pr
         json_blocks = parse_json_ld(html_content)
         for block in json_blocks:
             if isinstance(block, dict) and block.get("@type") in ["Product", "IndividualProduct", "ItemPage"]:
-                product_name = product_name or block.get("name")
+                cand_name = block.get("name")
+                if cand_name and not is_invalid_title(cand_name):
+                    product_name = product_name or cand_name
                 brand_obj = block.get("brand")
                 if isinstance(brand_obj, dict):
                     brand = brand or brand_obj.get("name")
@@ -175,7 +202,9 @@ def scrape_universal_product(url: str, html_content: Optional[str] = None) -> Pr
 
         # 2. Try OpenGraph parsing
         og_data = parse_opengraph(html_content)
-        product_name = product_name or og_data.get("og:title") or og_data.get("twitter:title")
+        og_cand = og_data.get("og:title") or og_data.get("twitter:title")
+        if og_cand and not is_invalid_title(og_cand):
+            product_name = product_name or og_cand
         image_url = image_url or og_data.get("og:image")
         current_price = current_price or extract_price_from_text(og_data.get("product:price:amount") or og_data.get("og:price:amount"))
 
@@ -183,7 +212,9 @@ def scrape_universal_product(url: str, html_content: Optional[str] = None) -> Pr
         if not product_name or "Amazon" in product_name:
             t_match = re.search(r'<span[^>]*id=["\']productTitle["\'][^>]*>(.*?)</span>', html_content, re.DOTALL | re.IGNORECASE)
             if t_match:
-                product_name = re.sub(r'\s+', ' ', t_match.group(1)).strip()
+                t_cand = re.sub(r'\s+', ' ', t_match.group(1)).strip()
+                if not is_invalid_title(t_cand):
+                    product_name = t_cand
 
         if not current_price:
             # Check Amazon price whole or offscreen
@@ -207,17 +238,17 @@ def scrape_universal_product(url: str, html_content: Optional[str] = None) -> Pr
             if img_match:
                 image_url = img_match.group(1)
 
-    # Fallback product name from URL path if still missing
-    if not product_name or product_name == f"{website_name} Product":
+    # Fallback product name from URL path if missing or invalid
+    if not product_name or is_invalid_title(product_name) or product_name == f"{website_name} Product":
         try:
             from backend.pipeline import extract_product_title_from_url
             url_title = extract_product_title_from_url(url)
-            if url_title:
+            if url_title and not is_invalid_title(url_title):
                 product_name = url_title
         except Exception:
             pass
 
-    if not product_name or product_name == f"{website_name} Product":
+    if not product_name or is_invalid_title(product_name) or product_name == f"{website_name} Product":
         path_parts = [p for p in urlparse(url).path.split('/') if p and len(p) > 2 and p not in ['p', 'dp', 'gp', 'product']]
         if path_parts:
             raw_title = path_parts[0].replace('-', ' ').replace('_', ' ')

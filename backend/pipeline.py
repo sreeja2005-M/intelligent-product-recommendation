@@ -271,9 +271,33 @@ def is_direct_product_url(url: str) -> bool:
     return False
 
 
+def is_invalid_title(title: Optional[str]) -> bool:
+    if not title or not isinstance(title, str):
+        return True
+    t = title.strip().lower()
+    if len(t) < 3:
+        return True
+    invalid_patterns = [
+        'access denied', '403 forbidden', '404', 'page not found', 'not found',
+        'robot check', 'attention required', 'security check', 'cloudflare',
+        'just a moment', 'verify you are human', 'are you a human', 'bot verification',
+        'enable cookies', 'captcha', 'bad request', 'internal server error',
+        'something went wrong', 'online electronic shopping store', 'online shopping site',
+        'online shopping india', 'shopping site in india', 'buy products online'
+    ]
+    if any(p in t for p in invalid_patterns):
+        return True
+    store_names = [
+        'reliance digital', 'croma', 'vijay sales', 'amazon', 'flipkart',
+        'myntra', 'ajio', 'meesho', 'tata cliq'
+    ]
+    if any(t == s or t == f"{s}.com" or t == f"{s}.in" for s in store_names):
+        return True
+    return False
+
+
 def get_store_search_url(store_name: str, clean_term: str) -> str:
     encoded = quote_plus(clean_term)
-    dash_term = quote_plus(re.sub(r'\s+', '-', clean_term).lower())
     store = (store_name or "").lower()
 
     if "amazon" in store:
@@ -281,13 +305,13 @@ def get_store_search_url(store_name: str, clean_term: str) -> str:
     elif "flipkart" in store:
         return f"https://www.flipkart.com/search?q={encoded}"
     elif "croma" in store:
-        return f"https://www.croma.com/search/?text={encoded}"
+        return f"https://www.croma.com/searchB?q={encoded}%3Arelevance&text={encoded}"
     elif "reliance" in store:
-        return f"https://www.reliancedigital.in/search?q={encoded}"
+        return f"https://www.reliancedigital.in/products?q={encoded}&page_no=1&page_size=12&page_type=number"
     elif "vijay" in store:
-        return f"https://www.vijaysales.com/search/{encoded}"
+        return f"https://www.vijaysales.com/search?q={encoded}"
     elif "myntra" in store:
-        return f"https://www.myntra.com/{dash_term}?rawQuery={encoded}"
+        return f"https://www.myntra.com/search?q={encoded}"
     elif "ajio" in store:
         return f"https://www.ajio.com/search/?text={encoded}"
     elif "tata" in store:
@@ -412,14 +436,14 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Reliance Digital",
                 "price": 74900.0,
-                "url": "https://www.reliancedigital.in/search?q=Apple%20iPhone%2016%20128GB",
-                "avail": "In Stock",
-                "action": "Search on Reliance Digital ↗"
+                "url": "https://www.reliancedigital.in/apple-iphone-16-128-gb-black/p/494422896",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Reliance Digital ↗ (Exact Model)"
             },
             {
                 "name": "Vijay Sales",
                 "price": 75900.0,
-                "url": "https://www.vijaysales.com/search/Apple%20iPhone%2016%20128GB",
+                "url": "https://www.vijaysales.com/search?q=Apple%20iPhone%2016%20128GB",
                 "avail": "In Stock",
                 "action": "Search on Vijay Sales ↗"
             },
@@ -448,14 +472,14 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Croma",
                 "price": 79900.0,
-                "url": "https://www.croma.com/search/?text=Apple%20iPhone%2016%20Plus%20128GB",
+                "url": "https://www.croma.com/searchB?q=Apple%20iPhone%2016%20Plus%20128GB%3Arelevance&text=Apple%20iPhone%2016%20Plus%20128GB",
                 "avail": "In Stock",
                 "action": "Search on Croma ↗"
             },
             {
                 "name": "Reliance Digital",
                 "price": 84900.0,
-                "url": "https://www.reliancedigital.in/search?q=Apple%20iPhone%2016%20Plus%20128GB",
+                "url": "https://www.reliancedigital.in/products?q=Apple%20iPhone%2016%20Plus%20128GB&page_no=1&page_size=12&page_type=number",
                 "avail": "In Stock",
                 "action": "Search on Reliance Digital ↗"
             },
@@ -505,7 +529,7 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Reliance Digital",
                 "price": 61900.0,
-                "url": "https://www.reliancedigital.in/search?q=Apple%20iPhone%2015%20128GB",
+                "url": "https://www.reliancedigital.in/products?q=Apple%20iPhone%2015%20128GB&page_no=1&page_size=12&page_type=number",
                 "avail": "In Stock",
                 "action": "Search on Reliance Digital ↗"
             }
@@ -541,7 +565,7 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Reliance Digital",
                 "price": 55900.0,
-                "url": "https://www.reliancedigital.in/search?q=Apple%20iPhone%2014%20128GB",
+                "url": "https://www.reliancedigital.in/products?q=Apple%20iPhone%2014%20128GB&page_no=1&page_size=12&page_type=number",
                 "avail": "In Stock",
                 "action": "Search on Reliance Digital ↗"
             }
@@ -592,7 +616,7 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Croma",
                 "price": 31499.0,
-                "url": "https://www.croma.com/search/?text=realme+p4+pro",
+                "url": "https://www.croma.com/searchB?q=realme%20p4%20pro%3Arelevance&text=realme%20p4%20pro",
                 "avail": "In Stock",
                 "action": "Search on Croma ↗"
             },
@@ -628,7 +652,7 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Croma",
                 "price": 1399.0,
-                "url": "https://www.croma.com/search/?text=boAt%20Airdopes%20141",
+                "url": "https://www.croma.com/searchB?q=boAt%20Airdopes%20141%3Arelevance&text=boAt%20Airdopes%20141",
                 "avail": "In Stock",
                 "action": "Search on Croma ↗"
             }
@@ -657,7 +681,7 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Myntra",
                 "price": 899.0,
-                "url": "https://www.myntra.com/safari-ashper-laptop-backpack?rawQuery=Safari%20Ashper%20Laptop%20Backpack",
+                "url": "https://www.myntra.com/search?q=Safari%20Ashper%20Laptop%20Backpack",
                 "avail": "In Stock",
                 "action": "Search on Myntra ↗"
             }
@@ -686,7 +710,7 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Croma",
                 "price": 1699.0,
-                "url": "https://www.croma.com/search/?text=Noise%20ColorFit%20Pulse%202%20Max",
+                "url": "https://www.croma.com/searchB?q=Noise%20ColorFit%20Pulse%202%20Max%3Arelevance&text=Noise%20ColorFit%20Pulse%202%20Max",
                 "avail": "In Stock",
                 "action": "Search on Croma ↗"
             }
@@ -736,12 +760,16 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
 
     if is_url:
         extracted_from_url = extract_product_title_from_url(query)
-        if not scraped_data or not scraped_data.product_name or scraped_data.product_name in ["Amazon Product", "Flipkart Product", "Multi-Brand Product"]:
-            product_name = extracted_from_url or (scraped_data.product_name if scraped_data else "Smart Buy Product")
+        scraped_name = scraped_data.product_name if scraped_data else None
+        if not scraped_name or is_invalid_title(scraped_name) or scraped_name in ["Amazon Product", "Flipkart Product", "Multi-Brand Product"]:
+            product_name = extracted_from_url or "Smart Buy Product"
         else:
-            product_name = scraped_data.product_name
+            product_name = scraped_name
     else:
-        product_name = scraped_data.product_name if scraped_data and scraped_data.product_name else query.title()
+        product_name = scraped_data.product_name if scraped_data and scraped_data.product_name and not is_invalid_title(scraped_data.product_name) else query.title()
+
+    if not product_name or is_invalid_title(product_name):
+        product_name = "Smart Buy Product"
     brand = scraped_data.brand if scraped_data and scraped_data.brand else "Multi-Brand"
     detected_cat = detect_product_category(product_name, query)
     category = detected_cat if (not scraped_data or not scraped_data.category or scraped_data.category in ["Electronics", "Multi-Brand"]) else scraped_data.category

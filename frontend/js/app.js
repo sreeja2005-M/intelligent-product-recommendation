@@ -603,6 +603,54 @@ function extractProductTitleFromUrl(rawUrl) {
     }
 }
 
+function isInvalidTitle(title) {
+    if (!title || typeof title !== 'string') return true;
+    const t = title.trim().toLowerCase();
+    if (t.length < 3) return true;
+
+    const invalidPatterns = [
+        'access denied',
+        '403 forbidden',
+        '404',
+        'page not found',
+        'not found',
+        'robot check',
+        'attention required',
+        'security check',
+        'cloudflare',
+        'just a moment',
+        'verify you are human',
+        'are you a human',
+        'bot verification',
+        'enable cookies',
+        'captcha',
+        'bad request',
+        'internal server error',
+        'something went wrong',
+        'online electronic shopping store',
+        'online shopping site',
+        'online shopping india',
+        'shopping site in india',
+        'buy products online'
+    ];
+    if (invalidPatterns.some(p => t.includes(p))) return true;
+
+    const storeNames = [
+        'reliance digital',
+        'croma',
+        'vijay sales',
+        'amazon',
+        'flipkart',
+        'myntra',
+        'ajio',
+        'meesho',
+        'tata cliq'
+    ];
+    if (storeNames.some(s => t === s || t === `${s}.com` || t === `${s}.in`)) return true;
+
+    return false;
+}
+
 function cleanSearchTerm(title) {
     if (!title) return '';
     let clean = title;
@@ -727,7 +775,6 @@ function isDirectProductUrl(url) {
 
 function getStoreSearchUrl(storeName, cleanTerm) {
     const encoded = encodeURIComponent(cleanTerm);
-    const dashTerm = encodeURIComponent(cleanTerm.replace(/\s+/g, '-').toLowerCase());
     const store = (storeName || '').toLowerCase();
 
     if (store.includes('amazon')) {
@@ -735,13 +782,13 @@ function getStoreSearchUrl(storeName, cleanTerm) {
     } else if (store.includes('flipkart')) {
         return `https://www.flipkart.com/search?q=${encoded}`;
     } else if (store.includes('croma')) {
-        return `https://www.croma.com/search/?text=${encoded}`;
+        return `https://www.croma.com/searchB?q=${encoded}%3Arelevance&text=${encoded}`;
     } else if (store.includes('reliance')) {
-        return `https://www.reliancedigital.in/search?q=${encoded}`;
+        return `https://www.reliancedigital.in/products?q=${encoded}&page_no=1&page_size=12&page_type=number`;
     } else if (store.includes('vijay')) {
-        return `https://www.vijaysales.com/search/${encoded}`;
+        return `https://www.vijaysales.com/search?q=${encoded}`;
     } else if (store.includes('myntra')) {
-        return `https://www.myntra.com/${dashTerm}?rawQuery=${encoded}`;
+        return `https://www.myntra.com/search?q=${encoded}`;
     } else if (store.includes('ajio')) {
         return `https://www.ajio.com/search/?text=${encoded}`;
     } else if (store.includes('tata')) {
@@ -758,18 +805,23 @@ function generateMockPipelineData(query) {
 
     if (isUrl) {
         productName = extractProductTitleFromUrl(query);
-        if (!productName) {
+        if (!productName || isInvalidTitle(productName)) {
             try {
                 const u = new URL(query.startsWith("www.") ? "https://" + query : query);
-                productName = u.hostname.replace("www.", "").split(".")[0].toUpperCase() + " Featured Product";
+                const hostPart = u.hostname.replace("www.", "").split(".")[0];
+                if (!isInvalidTitle(hostPart)) {
+                    productName = hostPart.toUpperCase() + " Featured Product";
+                } else {
+                    productName = "Featured Product";
+                }
             } catch (e) {
-                productName = "Smart Buy Product";
+                productName = "Featured Product";
             }
         }
     }
 
     productName = productName.replace(/\s+/g, " ").trim();
-    if (productName.length < 4) productName = "Featured Product";
+    if (productName.length < 4 || isInvalidTitle(productName)) productName = "Featured Product";
 
     // Detect Category & Estimate Realistic Baseline Indian Retail Price
     const text = (productName + " " + query).toLowerCase();
@@ -897,8 +949,8 @@ function generateMockPipelineData(query) {
             mrp: 79900,
             stores: [
                 { name: "Croma", price: 69900, url: "https://www.croma.com/apple-iphone-16-128gb-black-/p/309621", avail: "In Stock (Exact Model)", action: "Buy on Croma ↗ (Exact Model)" },
-                { name: "Reliance Digital", price: 74900, url: "https://www.reliancedigital.in/search?q=Apple%20iPhone%2016%20128GB", avail: "In Stock", action: "Search on Reliance Digital ↗" },
-                { name: "Vijay Sales", price: 75900, url: "https://www.vijaysales.com/search/Apple%20iPhone%2016%20128GB", avail: "In Stock", action: "Search on Vijay Sales ↗" },
+                { name: "Reliance Digital", price: 74900, url: "https://www.reliancedigital.in/apple-iphone-16-128-gb-black/p/494422896", avail: "In Stock (Exact Model)", action: "Buy on Reliance Digital ↗ (Exact Model)" },
+                { name: "Vijay Sales", price: 75900, url: "https://www.vijaysales.com/search?q=Apple%20iPhone%2016%20128GB", avail: "In Stock", action: "Search on Vijay Sales ↗" },
                 { name: "Amazon", price: 76999, url: "https://www.amazon.in/dp/B0DGHZWBYB", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
                 { name: "Flipkart", price: 79900, url: "https://www.flipkart.com/apple-iphone-16-black-128-gb/p/itm1abbae671f9ef", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" }
             ]
@@ -909,8 +961,8 @@ function generateMockPipelineData(query) {
             category: "Electronics",
             mrp: 89900,
             stores: [
-                { name: "Croma", price: 79900, url: "https://www.croma.com/search/?text=Apple%20iPhone%2016%20Plus%20128GB", avail: "In Stock", action: "Search on Croma ↗" },
-                { name: "Reliance Digital", price: 84900, url: "https://www.reliancedigital.in/search?q=Apple%20iPhone%2016%20Plus%20128GB", avail: "In Stock", action: "Search on Reliance Digital ↗" },
+                { name: "Croma", price: 79900, url: "https://www.croma.com/searchB?q=Apple%20iPhone%2016%20Plus%20128GB%3Arelevance&text=Apple%20iPhone%2016%20Plus%20128GB", avail: "In Stock", action: "Search on Croma ↗" },
+                { name: "Reliance Digital", price: 84900, url: "https://www.reliancedigital.in/products?q=Apple%20iPhone%2016%20Plus%20128GB&page_no=1&page_size=12&page_type=number", avail: "In Stock", action: "Search on Reliance Digital ↗" },
                 { name: "Amazon", price: 85999, url: "https://www.amazon.in/dp/B0DGJ1GPP7", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
                 { name: "Flipkart", price: 89900, url: "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" }
             ]
@@ -924,7 +976,7 @@ function generateMockPipelineData(query) {
                 { name: "Flipkart", price: 57999, url: "https://www.flipkart.com/apple-iphone-15-black-128-gb/p/itm6ac6485515ae4", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
                 { name: "Amazon", price: 58999, url: "https://www.amazon.in/dp/B0CHX1W1XY", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
                 { name: "Croma", price: 59900, url: "https://www.croma.com/apple-iphone-15-128gb-black-/p/300652", avail: "In Stock (Exact Model)", action: "Buy on Croma ↗ (Exact Model)" },
-                { name: "Reliance Digital", price: 61900, url: "https://www.reliancedigital.in/search?q=Apple%20iPhone%2015%20128GB", avail: "In Stock", action: "Search on Reliance Digital ↗" }
+                { name: "Reliance Digital", price: 61900, url: "https://www.reliancedigital.in/products?q=Apple%20iPhone%2015%20128GB&page_no=1&page_size=12&page_type=number", avail: "In Stock", action: "Search on Reliance Digital ↗" }
             ]
         },
         {
@@ -936,7 +988,7 @@ function generateMockPipelineData(query) {
                 { name: "Flipkart", price: 52999, url: "https://www.flipkart.com/apple-iphone-14-midnight-128-gb/p/itm9e60937a42240", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
                 { name: "Amazon", price: 53999, url: "https://www.amazon.in/dp/B0BDK62PDX", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
                 { name: "Croma", price: 54900, url: "https://www.croma.com/apple-iphone-14-128gb-midnight-/p/261933", avail: "In Stock (Exact Model)", action: "Buy on Croma ↗ (Exact Model)" },
-                { name: "Reliance Digital", price: 55900, url: "https://www.reliancedigital.in/search?q=Apple%20iPhone%2014%20128GB", avail: "In Stock", action: "Search on Reliance Digital ↗" }
+                { name: "Reliance Digital", price: 55900, url: "https://www.reliancedigital.in/products?q=Apple%20iPhone%2014%20128GB&page_no=1&page_size=12&page_type=number", avail: "In Stock", action: "Search on Reliance Digital ↗" }
             ]
         },
         {
@@ -957,7 +1009,7 @@ function generateMockPipelineData(query) {
             mrp: 32999,
             stores: [
                 { name: "Flipkart", price: 30999, url: "https://www.flipkart.com/search?q=realme+p4+pro+5g", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
-                { name: "Croma", price: 31499, url: "https://www.croma.com/search/?text=realme+p4+pro", avail: "In Stock", action: "Search on Croma ↗" },
+                { name: "Croma", price: 31499, url: "https://www.croma.com/searchB?q=realme%20p4%20pro%3Arelevance&text=realme%20p4%20pro", avail: "In Stock", action: "Search on Croma ↗" },
                 { name: "Amazon", price: 31999, url: "https://www.amazon.in/dp/B0HBCLFSZ1", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" }
             ]
         },
@@ -969,7 +1021,7 @@ function generateMockPipelineData(query) {
             stores: [
                 { name: "Flipkart", price: 1199, url: "https://www.flipkart.com/boat-airdopes-141-42h-playtime-beast-mode-bluetooth-headset/p/itme35cb8c464c23", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
                 { name: "Amazon", price: 1299, url: "https://www.amazon.in/dp/B09N3ZNHTY", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
-                { name: "Croma", price: 1399, url: "https://www.croma.com/search/?text=boAt%20Airdopes%20141", avail: "In Stock", action: "Search on Croma ↗" }
+                { name: "Croma", price: 1399, url: "https://www.croma.com/searchB?q=boAt%20Airdopes%20141%3Arelevance&text=boAt%20Airdopes%20141", avail: "In Stock", action: "Search on Croma ↗" }
             ]
         },
         {
@@ -980,7 +1032,7 @@ function generateMockPipelineData(query) {
             stores: [
                 { name: "Flipkart", price: 799, url: "https://www.flipkart.com/safari-ashper-cb-6-pockets-30-l-laptop-backpack/p/itm2139818817", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
                 { name: "Amazon", price: 849, url: "https://www.amazon.in/dp/B09S9QG3M4", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
-                { name: "Myntra", price: 899, url: "https://www.myntra.com/safari-ashper-laptop-backpack?rawQuery=Safari%20Ashper%20Laptop%20Backpack", avail: "In Stock", action: "Search on Myntra ↗" }
+                { name: "Myntra", price: 899, url: "https://www.myntra.com/search?q=Safari%20Ashper%20Laptop%20Backpack", avail: "In Stock", action: "Search on Myntra ↗" }
             ]
         },
         {
@@ -991,7 +1043,7 @@ function generateMockPipelineData(query) {
             stores: [
                 { name: "Flipkart", price: 1499, url: "https://www.flipkart.com/noise-colorfit-pulse-2-max-1-85-display-bluetooth-calling-smartwatch/p/itm8782bb0dc1ef9", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
                 { name: "Amazon", price: 1599, url: "https://www.amazon.in/dp/B0B3CPQ5PF", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
-                { name: "Croma", price: 1699, url: "https://www.croma.com/search/?text=Noise%20ColorFit%20Pulse%202%20Max", avail: "In Stock", action: "Search on Croma ↗" }
+                { name: "Croma", price: 1699, url: "https://www.croma.com/searchB?q=Noise%20ColorFit%20Pulse%202%20Max%3Arelevance&text=Noise%20ColorFit%20Pulse%202%20Max", avail: "In Stock", action: "Search on Croma ↗" }
             ]
         }
     ];
