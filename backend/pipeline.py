@@ -25,36 +25,229 @@ def detect_product_category(product_name: str, query: str) -> str:
     return "General"
 
 
+KNOWN_ASINS = {
+    "B0DGHZWBYB": "Apple iPhone 16 128 GB",
+    "B0DGHZ64H8": "Apple iPhone 16 256 GB",
+    "B0DGJ1GPP7": "Apple iPhone 16 Plus 128 GB",
+    "B0CHX1W1XY": "Apple iPhone 15 128 GB",
+    "B0CHX2F5QT": "Apple iPhone 15 256 GB",
+    "B0BDK62PDX": "Apple iPhone 14 128 GB",
+    "B09G9BL5CP": "Apple iPhone 13 128 GB",
+    "B0HBCLFSZ1": "Realme P4 Pro 5G 256 GB",
+    "B0CX58HYR3": "Samsung Galaxy S24 Ultra 5G 256 GB",
+    "B09N3ZNHTY": "boAt Airdopes 141 Bluetooth Earbuds",
+    "B0B3CPQ5PF": "Noise Pulse 2 Max Smartwatch",
+    "B09S9QG3M4": "Safari Ashper 30L Laptop Backpack"
+}
+
+
+def clean_slug(slug: str) -> str:
+    if not slug:
+        return ""
+    s = slug.replace("-", " ").replace("_", " ")
+    s = re.sub(r'\b(ref|qid|sr|pf_rd_\w+|pd_rd_\w+|pid|lid|otracker\w*|marketplace)\b.*', '', s, flags=re.IGNORECASE)
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s.title()
+
+
+def extract_product_title_from_url(raw_url: str) -> str:
+    if not raw_url:
+        return ""
+    try:
+        clean_url = raw_url.strip()
+        if clean_url.startswith("www."):
+            clean_url = "https://" + clean_url
+        if not clean_url.startswith(("http://", "https://")):
+            return clean_url
+
+        from urllib.parse import unquote
+        parsed = urlparse(clean_url)
+        host = parsed.netloc.lower()
+        pathname = unquote(parsed.path)
+
+        # 1. Query parameter search fallbacks
+        query_dict = {}
+        for part in parsed.query.split("&"):
+            if "=" in part:
+                k, v = part.split("=", 1)
+                query_dict[k.lower()] = unquote(v)
+        query_keywords = query_dict.get("q") or query_dict.get("k") or query_dict.get("text") or query_dict.get("keywords") or query_dict.get("rawquery")
+
+        # 2. Platform specific extraction
+        if "flipkart.com" in host:
+            m = re.search(r'/([^/]+)/p/(?:itm[a-zA-Z0-9]+|[^/]+)', pathname, re.IGNORECASE)
+            if m and m.group(1):
+                return clean_slug(m.group(1))
+
+        if "amazon." in host or "amzn." in host:
+            m = re.search(r'/([^/]+)/(?:dp|gp/product)/([a-zA-Z0-9]{10})', pathname, re.IGNORECASE)
+            if m and m.group(1) and m.group(1).lower() not in ['dp', 'gp', 'product', 'd', 's']:
+                return clean_slug(m.group(1))
+            asin_m = re.search(r'/(?:dp|gp/product|d)/([A-Z0-9]{10})', pathname, re.IGNORECASE)
+            if asin_m and asin_m.group(1) in KNOWN_ASINS:
+                return KNOWN_ASINS[asin_m.group(1)]
+
+        if "myntra.com" in host:
+            m = re.search(r'/([^/]+)/(\d+)/buy', pathname, re.IGNORECASE)
+            if m and m.group(1):
+                return clean_slug(m.group(1))
+
+        if "ajio.com" in host:
+            m = re.search(r'/([^/]+)/p/', pathname, re.IGNORECASE)
+            if m and m.group(1):
+                return clean_slug(m.group(1))
+
+        if "croma.com" in host:
+            m = re.search(r'/([^/]+)/p/\d+', pathname, re.IGNORECASE) or re.search(r'/([^/]+)/p/', pathname, re.IGNORECASE)
+            if m and m.group(1):
+                return clean_slug(m.group(1))
+
+        if "reliancedigital.in" in host:
+            m = re.search(r'/([^/]+)/p/\d+', pathname, re.IGNORECASE) or re.search(r'/([^/]+)/p/', pathname, re.IGNORECASE)
+            if m and m.group(1):
+                return clean_slug(m.group(1))
+
+        if "meesho.com" in host:
+            m = re.search(r'/([^/]+)/p/[a-zA-Z0-9]+', pathname, re.IGNORECASE)
+            if m and m.group(1):
+                return clean_slug(m.group(1))
+
+        if "vijaysales.com" in host:
+            m = re.search(r'/([a-zA-Z0-9\-]+)/\d+', pathname, re.IGNORECASE)
+            if m and m.group(1) and m.group(1).lower() not in ['search', 'product']:
+                return clean_slug(m.group(1))
+
+        # Generic fallback
+        m = re.search(r'/([^/]+)/p/', pathname, re.IGNORECASE)
+        if m and m.group(1) and len(m.group(1)) > 3:
+            return clean_slug(m.group(1))
+
+        segments = [
+            p for p in pathname.split('/')
+            if p and len(p) >= 3
+            and p.lower() not in ['p', 'dp', 'gp', 'product', 'products', 'buy', 'itm', 'search', 's', 'd', 'item', 'categories', 'c']
+            and not re.match(r'^\d+$', p)
+            and not (re.match(r'^[a-zA-Z0-9]{10,}$', p) and '-' not in p)
+        ]
+        if segments:
+            segments.sort(key=lambda s: (s.count('-'), len(s)), reverse=True)
+            return clean_slug(segments[0])
+
+        if query_keywords:
+            return query_keywords.replace('+', ' ').strip()
+
+        return ""
+    except Exception:
+        return ""
+
+
 def clean_search_term(title: str) -> str:
     if not title:
         return ""
-    clean = title
-    clean = clean.split('?')[0].split('#')[0]
+    from urllib.parse import unquote
+    clean = unquote(title)
+
     if clean.startswith(("http://", "https://", "www.")):
-        try:
-            target = "https://" + clean if clean.startswith("www.") else clean
-            parsed = urlparse(target)
-            path_parts = [p for p in parsed.path.split('/') if p and len(p) > 2 and p.lower() not in ['p', 'dp', 'gp', 'product', 'itm', 'search']]
-            if path_parts:
-                clean = path_parts[0].replace('-', ' ').replace('_', ' ')
-        except Exception:
-            pass
-    clean = re.sub(r'online\s+at\s+best\s+prices.*$', '', clean, flags=re.IGNORECASE)
+        clean = extract_product_title_from_url(clean) or clean
+
+    clean = clean.split('?')[0].split('#')[0]
+
+    # Normalize compound terms
+    clean = re.sub(r'\bt\s*shirt\b', 'T-Shirt', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'\bear\s*buds\b', 'Earbuds', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'\bsmart\s*watch\b', 'Smartwatch', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'\bair\s*dopes\b', 'Airdopes', clean, flags=re.IGNORECASE)
+
+    # Strip e-commerce website boilerplate
+    clean = re.sub(r'online\s+at\s+best\s+prices?.*$', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'\|\s*(flipkart|amazon|croma|myntra|ajio|reliance|vijay\s*sales|meesho|tata\s*cliq).*$', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'-\s*buy\s+online.*$', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'buy\s+online.*$', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'\b(flipkart\.com|amazon\.in|croma\.com|reliancedigital\.in|tatacliq\.com|myntra\.com|ajio\.com|meesho\.com)\b', '', clean, flags=re.IGNORECASE)
-    clean = re.sub(r'\b(with\s+camera\s+control|camera\s+control|works\s+with|built\s+for\s+apple\s+intelligence)\b.*$', '', clean, flags=re.IGNORECASE)
-    clean = re.sub(r':\s*5G\s+Mobile\s+Phone.*$', '', clean, flags=re.IGNORECASE)
+
+    # Technical marketing noise removal
+    marketing_fluff = [
+        r'\bwith\s+camera\s+control\b',
+        r'\bcamera\s+control\b',
+        r'\bbuilt\s+for\s+apple\s+intelligence\b',
+        r'\b48\s*mp\s+(?:fusion\s+)?camera\b',
+        r'\ba18\s+chip\b',
+        r'\ba16\s+bionic\b',
+        r'\bsuper\s+retina\s+xdr\b',
+        r'\bliquid\s+retina\b',
+        r'\bwith\s+\d+h?\s+playtime\b',
+        r'\b\d+h?\s+playtime\b',
+        r'\b(?:with\s+)?asap\s+charge\b',
+        r'\bquad\s+mic\s+enc\b',
+        r'\b(?:45|50|60)ms\s+low\s+latency\b',
+        r'\bbeast\s+mode\b',
+        r'\benx\s+tech\b',
+        r'\b1\.85\s*["\']?\s*(?:inch\s+)?display\b',
+        r'\bbluetooth\s+calling\b',
+        r'\bamoled\s+display\b',
+        r'\b\d+\s+pockets\b',
+        r'\b\d+\s*l\b',
+        r'\bcb\b',
+        r'\bwater\s+resistant\b',
+        r'\bipx[45]\b',
+        r'\bfree\s+shipping\b',
+        r'\blowest\s+price\b',
+        r'\bhigh\s+quality\b',
+        r'\bofficial\s+warranty\b',
+        r'\bpack\s+of\s+\d+\b',
+        r'\bcombo\s+pack\b',
+        r'\bexclusive\s+deal\b',
+        r'\bpure\s+cotton\b',
+        r'\bprinted\s+straight\b',
+        r'\bspread\s+collar\b',
+        r'\bslim\s+fit\b',
+        r'\bregular\s+fit\b',
+        r'\bbluetooth\s+headset\b'
+    ]
+    for pat in marketing_fluff:
+        clean = re.sub(pat, ' ', clean, flags=re.IGNORECASE)
+
+    # Normalize storage tokens: 128 GB -> 128GB, 256 GB -> 256GB
+    clean = re.sub(r'(\d+)\s*(gb|tb)\b', r'\1\2', clean, flags=re.IGNORECASE)
+
+    # Brackets & punctuation
     clean = re.sub(r'[\(\[\{][^\)\]\}]*[\)\]\}]', ' ', clean)
     clean = re.sub(r'[,:;|\/\\_+]', ' ', clean)
     clean = re.sub(r'\s+', ' ', clean).strip()
-    words = [w for w in clean.split() if len(w) > 1 and not re.match(r'^(with|for|and|the|buy|online|price|india|latest)$', w, re.IGNORECASE)]
+
+    # Strip arbitrary colors from spec electronics
+    if re.search(r'\b(128gb|256gb|512gb|64gb|1tb|iphone|galaxy|redmi|realme|oneplus|airdopes|pulse)\b', clean, re.IGNORECASE):
+        clean = re.sub(r'\b(black|blue|teal|green|midnight|starlight|purple|yellow|white|pink|titanium|gray|grey|olive|daybreak|cosmic|aurora)\b', ' ', clean, flags=re.IGNORECASE)
+
+    clean = re.sub(r'\s+', ' ', clean).strip()
+
+    # Filter stop words: allow single digits (2, 3...) and words
+    stop_words = r'^(with|for|and|the|buy|online|price|india|latest|best|genuine|original|new|featured|product)$'
+    words = [w for w in clean.split() if (len(w) > 1 or w.isdigit()) and not re.match(stop_words, w, re.IGNORECASE)]
+
+    core_nouns = [
+        "backpack", "bag", "luggage", "trolley", "suitcase",
+        "earbuds", "earphone", "earphones", "headphone", "headphones", "headset", "soundbar", "speaker", "tws",
+        "smartwatch", "watch",
+        "phone", "smartphone", "mobile", "iphone",
+        "laptop", "macbook", "tablet", "ipad",
+        "kurta", "kurti", "saree", "shirt", "tshirt", "t-shirt", "jeans", "dress", "jacket", "shoes", "sneakers"
+    ]
+
+    result_words = words
     if len(words) > 5:
-        clean = " ".join(words[:5])
-    elif len(words) > 0:
-        clean = " ".join(words)
-    return clean or title
+        head = words[:4]
+        tail_nouns = [w for w in words[4:] if w.lower() in core_nouns]
+        result_words = head + tail_nouns
+        seen = set()
+        deduped = []
+        for w in result_words:
+            if w.lower() not in seen:
+                seen.add(w.lower())
+                deduped.append(w)
+        result_words = deduped
+
+    return " ".join(result_words) if result_words else title
 
 
 def is_direct_product_url(url: str) -> bool:
@@ -80,19 +273,21 @@ def is_direct_product_url(url: str) -> bool:
 
 def get_store_search_url(store_name: str, clean_term: str) -> str:
     encoded = quote_plus(clean_term)
+    dash_term = quote_plus(re.sub(r'\s+', '-', clean_term).lower())
     store = (store_name or "").lower()
+
     if "amazon" in store:
         return f"https://www.amazon.in/s?k={encoded}"
     elif "flipkart" in store:
         return f"https://www.flipkart.com/search?q={encoded}"
     elif "croma" in store:
-        return f"https://www.croma.com/searchB?q={encoded}%3Arelevance&text={encoded}"
+        return f"https://www.croma.com/search/?text={encoded}"
     elif "reliance" in store:
-        return f"https://www.reliancedigital.in/products?q={encoded}&page_no=1&page_size=12&page_type=number"
+        return f"https://www.reliancedigital.in/search?q={encoded}"
     elif "vijay" in store:
-        return f"https://www.vijaysales.com/search?q={encoded}"
+        return f"https://www.vijaysales.com/search/{encoded}"
     elif "myntra" in store:
-        return f"https://www.myntra.com/search?q={encoded}"
+        return f"https://www.myntra.com/{dash_term}?rawQuery={encoded}"
     elif "ajio" in store:
         return f"https://www.ajio.com/search/?text={encoded}"
     elif "tata" in store:
@@ -217,14 +412,14 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Reliance Digital",
                 "price": 74900.0,
-                "url": "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20128gb&page_no=1&page_size=12&page_type=number",
+                "url": "https://www.reliancedigital.in/search?q=Apple%20iPhone%2016%20128GB",
                 "avail": "In Stock",
                 "action": "Search on Reliance Digital ↗"
             },
             {
                 "name": "Vijay Sales",
                 "price": 75900.0,
-                "url": "https://www.vijaysales.com/search?q=apple%20iphone%2016%20128gb",
+                "url": "https://www.vijaysales.com/search/Apple%20iPhone%2016%20128GB",
                 "avail": "In Stock",
                 "action": "Search on Vijay Sales ↗"
             },
@@ -238,7 +433,7 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Flipkart",
                 "price": 79900.0,
-                "url": "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef",
+                "url": "https://www.flipkart.com/apple-iphone-16-black-128-gb/p/itm1abbae671f9ef",
                 "avail": "In Stock (Exact Model)",
                 "action": "Buy on Flipkart ↗ (Exact Model)"
             }
@@ -253,23 +448,23 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Croma",
                 "price": 79900.0,
-                "url": "https://www.croma.com/searchB?q=apple%20iphone%2016%20plus%20128gb%3Arelevance&text=apple%20iphone%2016%20plus%20128gb",
+                "url": "https://www.croma.com/search/?text=Apple%20iPhone%2016%20Plus%20128GB",
                 "avail": "In Stock",
                 "action": "Search on Croma ↗"
             },
             {
                 "name": "Reliance Digital",
                 "price": 84900.0,
-                "url": "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20plus%20128gb&page_no=1&page_size=12&page_type=number",
+                "url": "https://www.reliancedigital.in/search?q=Apple%20iPhone%2016%20Plus%20128GB",
                 "avail": "In Stock",
                 "action": "Search on Reliance Digital ↗"
             },
             {
                 "name": "Amazon",
                 "price": 85999.0,
-                "url": "https://www.amazon.in/s?k=apple+iphone+16+plus+128gb",
-                "avail": "In Stock",
-                "action": "Search on Amazon ↗"
+                "url": "https://www.amazon.in/dp/B0DGJ1GPP7",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Amazon ↗ (Exact Model)"
             },
             {
                 "name": "Flipkart",
@@ -281,7 +476,7 @@ VERIFIED_BENCHMARKS = [
         ]
     },
     {
-        "matches": lambda t: ("iphone 15" in t or "iphone-15" in t) and not ("pro" in t),
+        "matches": lambda t: ("iphone 15" in t or "iphone-15" in t) and not ("plus" in t or "pro" in t),
         "name": "Apple iPhone 15 128 GB",
         "category": "Electronics",
         "mrp": 69900.0,
@@ -289,30 +484,95 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Flipkart",
                 "price": 57999.0,
-                "url": "https://www.flipkart.com/search?q=apple+iphone+15+128gb",
+                "url": "https://www.flipkart.com/apple-iphone-15-black-128-gb/p/itm6ac6485515ae4",
                 "avail": "In Stock (Exact Model)",
                 "action": "Buy on Flipkart ↗ (Exact Model)"
             },
             {
                 "name": "Amazon",
                 "price": 58999.0,
-                "url": "https://www.amazon.in/s?k=apple+iphone+15+128gb",
+                "url": "https://www.amazon.in/dp/B0CHX1W1XY",
                 "avail": "In Stock (Exact Model)",
                 "action": "Buy on Amazon ↗ (Exact Model)"
             },
             {
                 "name": "Croma",
                 "price": 59900.0,
-                "url": "https://www.croma.com/searchB?q=apple%20iphone%2015%20128gb%3Arelevance&text=apple%20iphone%2015%20128gb",
-                "avail": "In Stock",
-                "action": "Search on Croma ↗"
+                "url": "https://www.croma.com/apple-iphone-15-128gb-black-/p/300652",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Croma ↗ (Exact Model)"
             },
             {
                 "name": "Reliance Digital",
                 "price": 61900.0,
-                "url": "https://www.reliancedigital.in/products?q=apple%20iphone%2015%20128gb&page_no=1&page_size=12&page_type=number",
+                "url": "https://www.reliancedigital.in/search?q=Apple%20iPhone%2015%20128GB",
                 "avail": "In Stock",
                 "action": "Search on Reliance Digital ↗"
+            }
+        ]
+    },
+    {
+        "matches": lambda t: ("iphone 14" in t or "iphone-14" in t) and not ("plus" in t or "pro" in t),
+        "name": "Apple iPhone 14 128 GB",
+        "category": "Electronics",
+        "mrp": 69900.0,
+        "stores": [
+            {
+                "name": "Flipkart",
+                "price": 52999.0,
+                "url": "https://www.flipkart.com/apple-iphone-14-midnight-128-gb/p/itm9e60937a42240",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Flipkart ↗ (Exact Model)"
+            },
+            {
+                "name": "Amazon",
+                "price": 53999.0,
+                "url": "https://www.amazon.in/dp/B0BDK62PDX",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Amazon ↗ (Exact Model)"
+            },
+            {
+                "name": "Croma",
+                "price": 54900.0,
+                "url": "https://www.croma.com/apple-iphone-14-128gb-midnight-/p/261933",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Croma ↗ (Exact Model)"
+            },
+            {
+                "name": "Reliance Digital",
+                "price": 55900.0,
+                "url": "https://www.reliancedigital.in/search?q=Apple%20iPhone%2014%20128GB",
+                "avail": "In Stock",
+                "action": "Search on Reliance Digital ↗"
+            }
+        ]
+    },
+    {
+        "matches": lambda t: ("iphone 13" in t or "iphone-13" in t),
+        "name": "Apple iPhone 13 128 GB",
+        "category": "Electronics",
+        "mrp": 59900.0,
+        "stores": [
+            {
+                "name": "Flipkart",
+                "price": 44999.0,
+                "url": "https://www.flipkart.com/apple-iphone-13-midnight-128-gb/p/itmca361a0c16911",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Flipkart ↗ (Exact Model)"
+            },
+            {
+                "name": "Amazon",
+                "price": 45999.0,
+                "url": "https://www.amazon.in/dp/B09G9BL5CP",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Amazon ↗ (Exact Model)"
+            },
+            {
+                "name": "Croma",
+                "price": 46900.0,
+                "url": "https://www.croma.com/apple-iphone-13-128gb-midnight-/p/243459",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Croma ↗ (Exact Model)"
             }
         ]
     },
@@ -332,7 +592,7 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Croma",
                 "price": 31499.0,
-                "url": "https://www.croma.com/searchB?q=realme+p4+pro%3Arelevance&text=realme+p4+pro",
+                "url": "https://www.croma.com/search/?text=realme+p4+pro",
                 "avail": "In Stock",
                 "action": "Search on Croma ↗"
             },
@@ -342,6 +602,93 @@ VERIFIED_BENCHMARKS = [
                 "url": "https://www.amazon.in/dp/B0HBCLFSZ1",
                 "avail": "In Stock (Exact Model)",
                 "action": "Buy on Amazon ↗ (Exact Model)"
+            }
+        ]
+    },
+    {
+        "matches": lambda t: ("airdopes 141" in t or "airdopes-141" in t),
+        "name": "boAt Airdopes 141 Earbuds",
+        "category": "Electronics",
+        "mrp": 4490.0,
+        "stores": [
+            {
+                "name": "Flipkart",
+                "price": 1199.0,
+                "url": "https://www.flipkart.com/boat-airdopes-141-42h-playtime-beast-mode-bluetooth-headset/p/itme35cb8c464c23",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Flipkart ↗ (Exact Model)"
+            },
+            {
+                "name": "Amazon",
+                "price": 1299.0,
+                "url": "https://www.amazon.in/dp/B09N3ZNHTY",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Amazon ↗ (Exact Model)"
+            },
+            {
+                "name": "Croma",
+                "price": 1399.0,
+                "url": "https://www.croma.com/search/?text=boAt%20Airdopes%20141",
+                "avail": "In Stock",
+                "action": "Search on Croma ↗"
+            }
+        ]
+    },
+    {
+        "matches": lambda t: ("safari ashper" in t or "safari-ashper" in t),
+        "name": "Safari Ashper 30L Laptop Backpack",
+        "category": "General",
+        "mrp": 2999.0,
+        "stores": [
+            {
+                "name": "Flipkart",
+                "price": 799.0,
+                "url": "https://www.flipkart.com/safari-ashper-cb-6-pockets-30-l-laptop-backpack/p/itm2139818817",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Flipkart ↗ (Exact Model)"
+            },
+            {
+                "name": "Amazon",
+                "price": 849.0,
+                "url": "https://www.amazon.in/dp/B09S9QG3M4",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Amazon ↗ (Exact Model)"
+            },
+            {
+                "name": "Myntra",
+                "price": 899.0,
+                "url": "https://www.myntra.com/safari-ashper-laptop-backpack?rawQuery=Safari%20Ashper%20Laptop%20Backpack",
+                "avail": "In Stock",
+                "action": "Search on Myntra ↗"
+            }
+        ]
+    },
+    {
+        "matches": lambda t: ("pulse 2 max" in t or "pulse-2-max" in t),
+        "name": "Noise ColorFit Pulse 2 Max Smartwatch",
+        "category": "Electronics",
+        "mrp": 5999.0,
+        "stores": [
+            {
+                "name": "Flipkart",
+                "price": 1499.0,
+                "url": "https://www.flipkart.com/noise-colorfit-pulse-2-max-1-85-display-bluetooth-calling-smartwatch/p/itm8782bb0dc1ef9",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Flipkart ↗ (Exact Model)"
+            },
+            {
+                "name": "Amazon",
+                "price": 1599.0,
+                "url": "https://www.amazon.in/dp/B0B3CPQ5PF",
+                "avail": "In Stock (Exact Model)",
+                "action": "Buy on Amazon ↗ (Exact Model)"
+            },
+            {
+                "name": "Croma",
+                "price": 1699.0,
+                "url": "https://www.croma.com/search/?text=Noise%20ColorFit%20Pulse%202%20Max",
+                "avail": "In Stock",
+                "action": "Search on Croma ↗"
             }
         ]
     }
@@ -387,7 +734,14 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
             print(f"Live web scraper note: {e}. Falling back to universal parser.")
             scraped_data = scrape_universal_product(query)
 
-    product_name = scraped_data.product_name if scraped_data and scraped_data.product_name else query.title()
+    if is_url:
+        extracted_from_url = extract_product_title_from_url(query)
+        if not scraped_data or not scraped_data.product_name or scraped_data.product_name in ["Amazon Product", "Flipkart Product", "Multi-Brand Product"]:
+            product_name = extracted_from_url or (scraped_data.product_name if scraped_data else "Smart Buy Product")
+        else:
+            product_name = scraped_data.product_name
+    else:
+        product_name = scraped_data.product_name if scraped_data and scraped_data.product_name else query.title()
     brand = scraped_data.brand if scraped_data and scraped_data.brand else "Multi-Brand"
     detected_cat = detect_product_category(product_name, query)
     category = detected_cat if (not scraped_data or not scraped_data.category or scraped_data.category in ["Electronics", "Multi-Brand"]) else scraped_data.category

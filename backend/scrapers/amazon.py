@@ -1,4 +1,3 @@
-from playwright.sync_api import sync_playwright
 import re
 
 from backend.scrapers.base import ProductData

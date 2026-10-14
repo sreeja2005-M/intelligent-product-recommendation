@@ -209,6 +209,15 @@ def scrape_universal_product(url: str, html_content: Optional[str] = None) -> Pr
 
     # Fallback product name from URL path if still missing
     if not product_name or product_name == f"{website_name} Product":
+        try:
+            from backend.pipeline import extract_product_title_from_url
+            url_title = extract_product_title_from_url(url)
+            if url_title:
+                product_name = url_title
+        except Exception:
+            pass
+
+    if not product_name or product_name == f"{website_name} Product":
         path_parts = [p for p in urlparse(url).path.split('/') if p and len(p) > 2 and p not in ['p', 'dp', 'gp', 'product']]
         if path_parts:
             raw_title = path_parts[0].replace('-', ' ').replace('_', ' ')

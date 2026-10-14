@@ -463,37 +463,253 @@ function renderDashboard(data) {
 }
 
 
+const KNOWN_ASINS = {
+    "B0DGHZWBYB": "Apple iPhone 16 128 GB",
+    "B0DGHZ64H8": "Apple iPhone 16 256 GB",
+    "B0DGJ1GPP7": "Apple iPhone 16 Plus 128 GB",
+    "B0CHX1W1XY": "Apple iPhone 15 128 GB",
+    "B0CHX2F5QT": "Apple iPhone 15 256 GB",
+    "B0BDK62PDX": "Apple iPhone 14 128 GB",
+    "B09G9BL5CP": "Apple iPhone 13 128 GB",
+    "B0HBCLFSZ1": "Realme P4 Pro 5G 256 GB",
+    "B0CX58HYR3": "Samsung Galaxy S24 Ultra 5G 256 GB",
+    "B09N3ZNHTY": "boAt Airdopes 141 Bluetooth Earbuds",
+    "B0B3CPQ5PF": "Noise Pulse 2 Max Smartwatch",
+    "B09S9QG3M4": "Safari Ashper 30L Laptop Backpack"
+};
+
+function cleanSlug(slug) {
+    if (!slug) return '';
+    let s = slug.replace(/[-_]/g, ' ');
+    s = s.replace(/\b(ref|qid|sr|pf_rd_\w+|pd_rd_\w+|pid|lid|otracker\w*|marketplace)\b.*/gi, '');
+    s = s.replace(/\s+/g, ' ').trim();
+    return s.replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function extractProductTitleFromUrl(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== 'string') return '';
+    try {
+        let cleanUrl = rawUrl.trim();
+        if (cleanUrl.startsWith('www.')) cleanUrl = 'https://' + cleanUrl;
+        if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) return cleanUrl;
+
+        const urlObj = new URL(cleanUrl);
+        const host = urlObj.hostname.toLowerCase();
+        let pathname = decodeURIComponent(urlObj.pathname);
+
+        // 1. Query parameter search fallbacks
+        const queryKeywords = urlObj.searchParams.get('q') || 
+                              urlObj.searchParams.get('k') || 
+                              urlObj.searchParams.get('text') || 
+                              urlObj.searchParams.get('keywords') ||
+                              urlObj.searchParams.get('rawQuery');
+
+        // 2. Platform specific extraction
+        // FLIPKART: /slug/p/itm... or /dl/slug/p/...
+        if (host.includes('flipkart.com')) {
+            const pMatch = pathname.match(/\/([^\/]+)\/p\/(?:itm[a-zA-Z0-9]+|[^\/]+)/i);
+            if (pMatch && pMatch[1]) {
+                return cleanSlug(pMatch[1]);
+            }
+        }
+
+        // AMAZON: /slug/dp/ASIN or /gp/product/ASIN or /dp/ASIN
+        if (host.includes('amazon.') || host.includes('amzn.')) {
+            const dpMatch = pathname.match(/\/([^\/]+)\/(?:dp|gp\/product)\/([a-zA-Z0-9]{10})/i);
+            if (dpMatch && dpMatch[1] && !['dp', 'gp', 'product', 'd', 's'].includes(dpMatch[1].toLowerCase())) {
+                return cleanSlug(dpMatch[1]);
+            }
+            const asinMatch = pathname.match(/\/(?:dp|gp\/product|d)\/([A-Z0-9]{10})/i);
+            if (asinMatch && asinMatch[1] && KNOWN_ASINS[asinMatch[1]]) {
+                return KNOWN_ASINS[asinMatch[1]];
+            }
+        }
+
+        // MYNTRA: /category/brand/slug/id/buy or /slug/id/buy
+        if (host.includes('myntra.com')) {
+            const myntraMatch = pathname.match(/\/([^\/]+)\/(\d+)\/buy/i);
+            if (myntraMatch && myntraMatch[1]) {
+                return cleanSlug(myntraMatch[1]);
+            }
+        }
+
+        // AJIO: /slug/p/id
+        if (host.includes('ajio.com')) {
+            const ajioMatch = pathname.match(/\/([^\/]+)\/p\//i);
+            if (ajioMatch && ajioMatch[1]) {
+                return cleanSlug(ajioMatch[1]);
+            }
+        }
+
+        // CROMA: /slug/p/id
+        if (host.includes('croma.com')) {
+            const cromaMatch = pathname.match(/\/([^\/]+)\/p\/\d+/i) || pathname.match(/\/([^\/]+)\/p\//i);
+            if (cromaMatch && cromaMatch[1]) {
+                return cleanSlug(cromaMatch[1]);
+            }
+        }
+
+        // RELIANCE DIGITAL: /slug/p/id
+        if (host.includes('reliancedigital.in')) {
+            const relianceMatch = pathname.match(/\/([^\/]+)\/p\/\d+/i) || pathname.match(/\/([^\/]+)\/p\//i);
+            if (relianceMatch && relianceMatch[1]) {
+                return cleanSlug(relianceMatch[1]);
+            }
+        }
+
+        // MEESHO: /slug/p/id
+        if (host.includes('meesho.com')) {
+            const meeshoMatch = pathname.match(/\/([^\/]+)\/p\/[a-zA-Z0-9]+/i);
+            if (meeshoMatch && meeshoMatch[1]) {
+                return cleanSlug(meeshoMatch[1]);
+            }
+        }
+
+        // VIJAY SALES: /slug/id
+        if (host.includes('vijaysales.com')) {
+            const vijayMatch = pathname.match(/\/([a-zA-Z0-9\-]+)\/\d+/i);
+            if (vijayMatch && vijayMatch[1] && !['search', 'product'].includes(vijayMatch[1].toLowerCase())) {
+                return cleanSlug(vijayMatch[1]);
+            }
+        }
+
+        // Generic fallback: segment before /p/
+        const genericPMatch = pathname.match(/\/([^\/]+)\/p\//i);
+        if (genericPMatch && genericPMatch[1] && genericPMatch[1].length > 3) {
+            return cleanSlug(genericPMatch[1]);
+        }
+
+        const segments = pathname.split('/').filter(p => {
+            if (!p || p.length < 3) return false;
+            const l = p.toLowerCase();
+            if (['p', 'dp', 'gp', 'product', 'products', 'buy', 'itm', 'search', 's', 'd', 'item', 'categories', 'c'].includes(l)) return false;
+            if (/^\d+$/.test(p)) return false;
+            if (/^[a-zA-Z0-9]{10,}$/.test(p) && !p.includes('-')) return false;
+            return true;
+        });
+
+        if (segments.length > 0) {
+            segments.sort((a, b) => (b.split('-').length - a.split('-').length) || (b.length - a.length));
+            return cleanSlug(segments[0]);
+        }
+
+        if (queryKeywords) {
+            return queryKeywords.replace(/\+/g, ' ').trim();
+        }
+
+        return '';
+    } catch (e) {
+        return '';
+    }
+}
+
 function cleanSearchTerm(title) {
     if (!title) return '';
     let clean = title;
     try { clean = decodeURIComponent(clean); } catch (e) {}
-    clean = clean.split('?')[0].split('#')[0];
+
+    // If title is a full URL, extract product name first
     if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('www.')) {
-        try {
-            const urlObj = new URL(clean.startsWith('www.') ? 'https://' + clean : clean);
-            const pathParts = urlObj.pathname.split('/').filter(p => p && p.length > 2 && !['p', 'dp', 'gp', 'product', 'itm', 'search'].includes(p.toLowerCase()));
-            if (pathParts.length > 0) {
-                clean = pathParts[0].replace(/[-_]/g, ' ');
-            }
-        } catch (e) {}
+        clean = extractProductTitleFromUrl(clean) || clean;
     }
-    clean = clean.replace(/online\s+at\s+best\s+prices.*$/i, '');
+
+    clean = clean.split('?')[0].split('#')[0];
+
+    // Normalize compound terms
+    clean = clean.replace(/\bt\s*shirt\b/gi, 'T-Shirt');
+    clean = clean.replace(/\bear\s*buds\b/gi, 'Earbuds');
+    clean = clean.replace(/\bsmart\s*watch\b/gi, 'Smartwatch');
+    clean = clean.replace(/\bair\s*dopes\b/gi, 'Airdopes');
+
+    // Strip e-commerce website boilerplate
+    clean = clean.replace(/online\s+at\s+best\s+prices?.*$/i, '');
     clean = clean.replace(/\|\s*(flipkart|amazon|croma|myntra|ajio|reliance|vijay\s*sales|meesho|tata\s*cliq).*$/i, '');
     clean = clean.replace(/-\s*buy\s+online.*$/i, '');
     clean = clean.replace(/buy\s+online.*$/i, '');
     clean = clean.replace(/\b(flipkart\.com|amazon\.in|croma\.com|reliancedigital\.in|tatacliq\.com|myntra\.com|ajio\.com|meesho\.com)\b/gi, '');
-    clean = clean.replace(/\b(with\s+camera\s+control|camera\s+control|works\s+with|built\s+for\s+apple\s+intelligence)\b.*$/i, '');
-    clean = clean.replace(/:\s*5G\s+Mobile\s+Phone.*$/i, '');
+
+    // Technical marketing noise removal
+    const marketingFluff = [
+        /\bwith\s+camera\s+control\b/gi,
+        /\bcamera\s+control\b/gi,
+        /\bbuilt\s+for\s+apple\s+intelligence\b/gi,
+        /\b48\s*mp\s+(?:fusion\s+)?camera\b/gi,
+        /\ba18\s+chip\b/gi,
+        /\ba16\s+bionic\b/gi,
+        /\bsuper\s+retina\s+xdr\b/gi,
+        /\bliquid\s+retina\b/gi,
+        /\bwith\s+\d+h?\s+playtime\b/gi,
+        /\b\d+h?\s+playtime\b/gi,
+        /\b(?:with\s+)?asap\s+charge\b/gi,
+        /\bquad\s+mic\s+enc\b/gi,
+        /\b(?:45|50|60)ms\s+low\s+latency\b/gi,
+        /\bbeast\s+mode\b/gi,
+        /\benx\s+tech\b/gi,
+        /\b1\.85\s*["']?\s*(?:inch\s+)?display\b/gi,
+        /\bbluetooth\s+calling\b/gi,
+        /\bamoled\s+display\b/gi,
+        /\b\d+\s+pockets\b/gi,
+        /\b\d+\s*l\b/gi,
+        /\bcb\b/gi,
+        /\bwater\s+resistant\b/gi,
+        /\bipx[45]\b/gi,
+        /\bfree\s+shipping\b/gi,
+        /\blowest\s+price\b/gi,
+        /\bhigh\s+quality\b/gi,
+        /\bofficial\s+warranty\b/gi,
+        /\bpack\s+of\s+\d+\b/gi,
+        /\bcombo\s+pack\b/gi,
+        /\bexclusive\s+deal\b/gi,
+        /\bpure\s+cotton\b/gi,
+        /\bprinted\s+straight\b/gi,
+        /\bspread\s+collar\b/gi,
+        /\bslim\s+fit\b/gi,
+        /\bregular\s+fit\b/gi,
+        /\bbluetooth\s+headset\b/gi
+    ];
+
+    for (const pat of marketingFluff) {
+        clean = clean.replace(pat, ' ');
+    }
+
+    // Normalize storage tokens: 128 GB -> 128GB, 256 GB -> 256GB
+    clean = clean.replace(/(\d+)\s*(gb|tb)\b/gi, '$1$2');
+
+    // Clean brackets/punctuation
     clean = clean.replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, ' ');
     clean = clean.replace(/[,:;|\/\\_+]/g, ' ');
     clean = clean.replace(/\s+/g, ' ').trim();
-    const words = clean.split(' ').filter(w => w.length > 1 && !/^(with|for|and|the|buy|online|price|india|latest)$/i.test(w));
-    if (words.length > 5) {
-        clean = words.slice(0, 5).join(' ');
-    } else if (words.length > 0) {
-        clean = words.join(' ');
+
+    // In electronics with specific model/spec, strip arbitrary color names so searches hit the model
+    if (/\b(128gb|256gb|512gb|64gb|1tb|iphone|galaxy|redmi|realme|oneplus|airdopes|pulse)\b/i.test(clean)) {
+        clean = clean.replace(/\b(black|blue|teal|green|midnight|starlight|purple|yellow|white|pink|titanium|gray|grey|olive|daybreak|cosmic|aurora)\b/gi, ' ');
     }
-    return clean || title;
+
+    clean = clean.replace(/\s+/g, ' ').trim();
+
+    // Filter stop words: allow digits (2, 3...) and words
+    const stopWords = /^(with|for|and|the|buy|online|price|india|latest|best|genuine|original|new|featured|product)$/i;
+    const words = clean.split(' ').filter(w => (w.length > 1 || /^\d+$/i.test(w)) && !stopWords.test(w));
+
+    // Category Nouns that must NEVER be discarded
+    const CORE_NOUNS = [
+        "backpack", "bag", "luggage", "trolley", "suitcase",
+        "earbuds", "earphone", "earphones", "headphone", "headphones", "headset", "soundbar", "speaker", "tws",
+        "smartwatch", "watch",
+        "phone", "smartphone", "mobile", "iphone",
+        "laptop", "macbook", "tablet", "ipad",
+        "kurta", "kurti", "saree", "shirt", "tshirt", "t-shirt", "jeans", "dress", "jacket", "shoes", "sneakers"
+    ];
+
+    let resultWords = words;
+    if (words.length > 5) {
+        const head = words.slice(0, 4);
+        const tailNouns = words.slice(4).filter(w => CORE_NOUNS.includes(w.toLowerCase()));
+        resultWords = [...head, ...tailNouns];
+        resultWords = [...new Set(resultWords)];
+    }
+
+    return resultWords.join(' ') || title;
 }
 
 function isDirectProductUrl(url) {
@@ -511,19 +727,21 @@ function isDirectProductUrl(url) {
 
 function getStoreSearchUrl(storeName, cleanTerm) {
     const encoded = encodeURIComponent(cleanTerm);
+    const dashTerm = encodeURIComponent(cleanTerm.replace(/\s+/g, '-').toLowerCase());
     const store = (storeName || '').toLowerCase();
+
     if (store.includes('amazon')) {
         return `https://www.amazon.in/s?k=${encoded}`;
     } else if (store.includes('flipkart')) {
         return `https://www.flipkart.com/search?q=${encoded}`;
     } else if (store.includes('croma')) {
-        return `https://www.croma.com/searchB?q=${encoded}%3Arelevance&text=${encoded}`;
+        return `https://www.croma.com/search/?text=${encoded}`;
     } else if (store.includes('reliance')) {
-        return `https://www.reliancedigital.in/products?q=${encoded}&page_no=1&page_size=12&page_type=number`;
+        return `https://www.reliancedigital.in/search?q=${encoded}`;
     } else if (store.includes('vijay')) {
-        return `https://www.vijaysales.com/search?q=${encoded}`;
+        return `https://www.vijaysales.com/search/${encoded}`;
     } else if (store.includes('myntra')) {
-        return `https://www.myntra.com/search?q=${encoded}`;
+        return `https://www.myntra.com/${dashTerm}?rawQuery=${encoded}`;
     } else if (store.includes('ajio')) {
         return `https://www.ajio.com/search/?text=${encoded}`;
     } else if (store.includes('tata')) {
@@ -539,39 +757,14 @@ function generateMockPipelineData(query) {
     let productName = query.trim();
 
     if (isUrl) {
-        try {
-            const cleanUrl = query.startsWith("www.") ? "https://" + query : query;
-            const urlObj = new URL(cleanUrl);
-            
-            // 1. Try Pathname Slug First (e.g. /safari-ashper-cb-6-pockets-30-l-laptop-backpack/p/itm...)
-            const pathParts = urlObj.pathname.split("/").filter(p => {
-                if (!p || p.length < 3) return false;
-                const lower = p.toLowerCase();
-                if (["dp", "gp", "product", "p", "buy", "itm", "electronics", "reh"].includes(lower)) return false;
-                if (/^[a-zA-Z0-9]{10}$/.test(p)) return false; // Ignore ASINs like B07V2Q7K3Y
-                if (/^itm[a-zA-Z0-9]+$/i.test(p)) return false; // Ignore Flipkart item IDs
-                return true;
-            });
-
-            if (pathParts.length > 0) {
-                pathParts.sort((a, b) => b.length - a.length);
-                productName = pathParts[0]
-                    .replace(/[-_]/g, " ")
-                    .replace(/\b(ref|qid|sr|pf_rd_\w+|pd_rd_\w+).*/g, "")
-                    .replace(/\s+/g, " ")
-                    .trim()
-                    .replace(/\b\w/g, c => c.toUpperCase());
-            } else {
-                const searchParams = urlObj.searchParams;
-                const paramTitle = searchParams.get("k") || searchParams.get("q") || searchParams.get("text") || searchParams.get("keywords");
-                if (paramTitle) {
-                    productName = paramTitle.replace(/\+/g, " ").trim();
-                } else {
-                    productName = urlObj.hostname.replace("www.", "").split(".")[0].toUpperCase() + " Featured Product";
-                }
+        productName = extractProductTitleFromUrl(query);
+        if (!productName) {
+            try {
+                const u = new URL(query.startsWith("www.") ? "https://" + query : query);
+                productName = u.hostname.replace("www.", "").split(".")[0].toUpperCase() + " Featured Product";
+            } catch (e) {
+                productName = "Smart Buy Product";
             }
-        } catch (e) {
-            productName = "Smart Buy Product";
         }
     }
 
@@ -611,15 +804,21 @@ function generateMockPipelineData(query) {
         } else if (text.includes("iphone 16 pro") || text.includes("iphone 15 pro") || text.includes("s24 ultra") || text.includes("macbook pro")) {
             basePrice = 119900;
             originalPrice = 134900;
+        } else if (text.includes("iphone 16 plus") || text.includes("iphone-16-plus")) {
+            basePrice = 89900;
+            originalPrice = 99900;
         } else if (text.includes("iphone 16") || text.includes("iphone-16")) {
             basePrice = 76999;
             originalPrice = 89900;
         } else if (text.includes("iphone 15") || text.includes("iphone-15")) {
-            basePrice = 64999;
-            originalPrice = 79900;
-        } else if (text.includes("iphone 14") || text.includes("iphone 13")) {
+            basePrice = 58999;
+            originalPrice = 69900;
+        } else if (text.includes("iphone 14")) {
             basePrice = 52999;
             originalPrice = 69900;
+        } else if (text.includes("iphone 13")) {
+            basePrice = 44999;
+            originalPrice = 59900;
         } else if (text.includes("iphone") || text.includes("gaming laptop") || text.includes("rtx 4060") || text.includes("rtx 3050")) {
             basePrice = 54990;
             originalPrice = 69900;
@@ -644,8 +843,8 @@ function generateMockPipelineData(query) {
         } else if (text.includes("shoe") || text.includes("sneaker") || text.includes("nike") || text.includes("adidas") || text.includes("puma")) {
             basePrice = 2499;
         } else if (text.includes("kurta") || text.includes("kurti") || text.includes("saree") || text.includes("ethnic")) {
-            basePrice = 239; // Verified retail price for women's printed straight kurta
-            originalPrice = 1599; // Standard MRP
+            basePrice = 239;
+            originalPrice = 1599;
         } else if (text.includes("shirt") || text.includes("jeans") || text.includes("t-shirt") || text.includes("jacket") || text.includes("dress")) {
             basePrice = 499;
             originalPrice = 1299;
@@ -664,11 +863,13 @@ function generateMockPipelineData(query) {
     if (isUrl) {
         const lowerQ = query.toLowerCase();
         if (lowerQ.includes('flipkart.')) sourceStoreName = "Flipkart";
-        else if (lowerQ.includes('amazon.')) sourceStoreName = "Amazon";
+        else if (lowerQ.includes('amazon.') || lowerQ.includes('amzn.')) sourceStoreName = "Amazon";
         else if (lowerQ.includes('meesho.')) sourceStoreName = "Meesho";
         else if (lowerQ.includes('myntra.')) sourceStoreName = "Myntra";
         else if (lowerQ.includes('ajio.')) sourceStoreName = "Ajio";
         else if (lowerQ.includes('croma.')) sourceStoreName = "Croma";
+        else if (lowerQ.includes('reliancedigital.')) sourceStoreName = "Reliance Digital";
+        else if (lowerQ.includes('vijaysales.')) sourceStoreName = "Vijay Sales";
     }
 
     const UNIVERSAL_BRANDS = [
@@ -687,8 +888,6 @@ function generateMockPipelineData(query) {
     const isPlatformExclusive = Boolean(isUrl && sourceStoreName && !isUniversalBrand);
 
     const cleanTerm = cleanSearchTerm(productName);
-    const storeSearchTerm = encodeURIComponent(cleanTerm);
-    const dashSearchTerm = storeSearchTerm.replace(/%20/g, "-");
 
     const BENCHMARKS = [
         {
@@ -698,10 +897,10 @@ function generateMockPipelineData(query) {
             mrp: 79900,
             stores: [
                 { name: "Croma", price: 69900, url: "https://www.croma.com/apple-iphone-16-128gb-black-/p/309621", avail: "In Stock (Exact Model)", action: "Buy on Croma ↗ (Exact Model)" },
-                { name: "Reliance Digital", price: 74900, url: "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20128gb&page_no=1&page_size=12&page_type=number", avail: "In Stock", action: "Search on Reliance Digital ↗" },
-                { name: "Vijay Sales", price: 75900, url: "https://www.vijaysales.com/search?q=apple%20iphone%2016%20128gb", avail: "In Stock", action: "Search on Vijay Sales ↗" },
+                { name: "Reliance Digital", price: 74900, url: "https://www.reliancedigital.in/search?q=Apple%20iPhone%2016%20128GB", avail: "In Stock", action: "Search on Reliance Digital ↗" },
+                { name: "Vijay Sales", price: 75900, url: "https://www.vijaysales.com/search/Apple%20iPhone%2016%20128GB", avail: "In Stock", action: "Search on Vijay Sales ↗" },
                 { name: "Amazon", price: 76999, url: "https://www.amazon.in/dp/B0DGHZWBYB", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
-                { name: "Flipkart", price: 79900, url: "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" }
+                { name: "Flipkart", price: 79900, url: "https://www.flipkart.com/apple-iphone-16-black-128-gb/p/itm1abbae671f9ef", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" }
             ]
         },
         {
@@ -710,22 +909,45 @@ function generateMockPipelineData(query) {
             category: "Electronics",
             mrp: 89900,
             stores: [
-                { name: "Croma", price: 79900, url: "https://www.croma.com/searchB?q=apple%20iphone%2016%20plus%20128gb%3Arelevance&text=apple%20iphone%2016%20plus%20128gb", avail: "In Stock", action: "Search on Croma ↗" },
-                { name: "Reliance Digital", price: 84900, url: "https://www.reliancedigital.in/products?q=apple%20iphone%2016%20plus%20128gb&page_no=1&page_size=12&page_type=number", avail: "In Stock", action: "Search on Reliance Digital ↗" },
-                { name: "Amazon", price: 85999, url: "https://www.amazon.in/s?k=apple+iphone+16+plus+128gb", avail: "In Stock", action: "Search on Amazon ↗" },
+                { name: "Croma", price: 79900, url: "https://www.croma.com/search/?text=Apple%20iPhone%2016%20Plus%20128GB", avail: "In Stock", action: "Search on Croma ↗" },
+                { name: "Reliance Digital", price: 84900, url: "https://www.reliancedigital.in/search?q=Apple%20iPhone%2016%20Plus%20128GB", avail: "In Stock", action: "Search on Reliance Digital ↗" },
+                { name: "Amazon", price: 85999, url: "https://www.amazon.in/dp/B0DGJ1GPP7", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
                 { name: "Flipkart", price: 89900, url: "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" }
             ]
         },
         {
-            matches: (t) => (t.includes("iphone 15") || t.includes("iphone-15")) && !t.includes("pro"),
+            matches: (t) => (t.includes("iphone 15") || t.includes("iphone-15")) && !t.includes("plus") && !t.includes("pro"),
             name: "Apple iPhone 15 128 GB",
             category: "Electronics",
             mrp: 69900,
             stores: [
-                { name: "Flipkart", price: 57999, url: "https://www.flipkart.com/search?q=apple+iphone+15+128gb", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
-                { name: "Amazon", price: 58999, url: "https://www.amazon.in/s?k=apple+iphone+15+128gb", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
-                { name: "Croma", price: 59900, url: "https://www.croma.com/searchB?q=apple%20iphone%2015%20128gb%3Arelevance&text=apple%20iphone%2015%20128gb", avail: "In Stock", action: "Search on Croma ↗" },
-                { name: "Reliance Digital", price: 61900, url: "https://www.reliancedigital.in/products?q=apple%20iphone%2015%20128gb&page_no=1&page_size=12&page_type=number", avail: "In Stock", action: "Search on Reliance Digital ↗" }
+                { name: "Flipkart", price: 57999, url: "https://www.flipkart.com/apple-iphone-15-black-128-gb/p/itm6ac6485515ae4", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
+                { name: "Amazon", price: 58999, url: "https://www.amazon.in/dp/B0CHX1W1XY", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
+                { name: "Croma", price: 59900, url: "https://www.croma.com/apple-iphone-15-128gb-black-/p/300652", avail: "In Stock (Exact Model)", action: "Buy on Croma ↗ (Exact Model)" },
+                { name: "Reliance Digital", price: 61900, url: "https://www.reliancedigital.in/search?q=Apple%20iPhone%2015%20128GB", avail: "In Stock", action: "Search on Reliance Digital ↗" }
+            ]
+        },
+        {
+            matches: (t) => (t.includes("iphone 14") || t.includes("iphone-14")) && !t.includes("plus") && !t.includes("pro"),
+            name: "Apple iPhone 14 128 GB",
+            category: "Electronics",
+            mrp: 69900,
+            stores: [
+                { name: "Flipkart", price: 52999, url: "https://www.flipkart.com/apple-iphone-14-midnight-128-gb/p/itm9e60937a42240", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
+                { name: "Amazon", price: 53999, url: "https://www.amazon.in/dp/B0BDK62PDX", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
+                { name: "Croma", price: 54900, url: "https://www.croma.com/apple-iphone-14-128gb-midnight-/p/261933", avail: "In Stock (Exact Model)", action: "Buy on Croma ↗ (Exact Model)" },
+                { name: "Reliance Digital", price: 55900, url: "https://www.reliancedigital.in/search?q=Apple%20iPhone%2014%20128GB", avail: "In Stock", action: "Search on Reliance Digital ↗" }
+            ]
+        },
+        {
+            matches: (t) => (t.includes("iphone 13") || t.includes("iphone-13")),
+            name: "Apple iPhone 13 128 GB",
+            category: "Electronics",
+            mrp: 59900,
+            stores: [
+                { name: "Flipkart", price: 44999, url: "https://www.flipkart.com/apple-iphone-13-midnight-128-gb/p/itmca361a0c16911", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
+                { name: "Amazon", price: 45999, url: "https://www.amazon.in/dp/B09G9BL5CP", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
+                { name: "Croma", price: 46900, url: "https://www.croma.com/apple-iphone-13-128gb-midnight-/p/243459", avail: "In Stock (Exact Model)", action: "Buy on Croma ↗ (Exact Model)" }
             ]
         },
         {
@@ -735,8 +957,41 @@ function generateMockPipelineData(query) {
             mrp: 32999,
             stores: [
                 { name: "Flipkart", price: 30999, url: "https://www.flipkart.com/search?q=realme+p4+pro+5g", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
-                { name: "Croma", price: 31499, url: "https://www.croma.com/searchB?q=realme+p4+pro%3Arelevance&text=realme+p4+pro", avail: "In Stock", action: "Search on Croma ↗" },
+                { name: "Croma", price: 31499, url: "https://www.croma.com/search/?text=realme+p4+pro", avail: "In Stock", action: "Search on Croma ↗" },
                 { name: "Amazon", price: 31999, url: "https://www.amazon.in/dp/B0HBCLFSZ1", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" }
+            ]
+        },
+        {
+            matches: (t) => (t.includes("airdopes 141") || t.includes("airdopes-141")),
+            name: "boAt Airdopes 141 Earbuds",
+            category: "Electronics",
+            mrp: 4490,
+            stores: [
+                { name: "Flipkart", price: 1199, url: "https://www.flipkart.com/boat-airdopes-141-42h-playtime-beast-mode-bluetooth-headset/p/itme35cb8c464c23", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
+                { name: "Amazon", price: 1299, url: "https://www.amazon.in/dp/B09N3ZNHTY", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
+                { name: "Croma", price: 1399, url: "https://www.croma.com/search/?text=boAt%20Airdopes%20141", avail: "In Stock", action: "Search on Croma ↗" }
+            ]
+        },
+        {
+            matches: (t) => (t.includes("safari ashper") || t.includes("safari-ashper")),
+            name: "Safari Ashper 30L Laptop Backpack",
+            category: "General",
+            mrp: 2999,
+            stores: [
+                { name: "Flipkart", price: 799, url: "https://www.flipkart.com/safari-ashper-cb-6-pockets-30-l-laptop-backpack/p/itm2139818817", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
+                { name: "Amazon", price: 849, url: "https://www.amazon.in/dp/B09S9QG3M4", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
+                { name: "Myntra", price: 899, url: "https://www.myntra.com/safari-ashper-laptop-backpack?rawQuery=Safari%20Ashper%20Laptop%20Backpack", avail: "In Stock", action: "Search on Myntra ↗" }
+            ]
+        },
+        {
+            matches: (t) => (t.includes("pulse 2 max") || t.includes("pulse-2-max")),
+            name: "Noise ColorFit Pulse 2 Max Smartwatch",
+            category: "Electronics",
+            mrp: 5999,
+            stores: [
+                { name: "Flipkart", price: 1499, url: "https://www.flipkart.com/noise-colorfit-pulse-2-max-1-85-display-bluetooth-calling-smartwatch/p/itm8782bb0dc1ef9", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
+                { name: "Amazon", price: 1599, url: "https://www.amazon.in/dp/B0B3CPQ5PF", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
+                { name: "Croma", price: 1699, url: "https://www.croma.com/search/?text=Noise%20ColorFit%20Pulse%202%20Max", avail: "In Stock", action: "Search on Croma ↗" }
             ]
         }
     ];
