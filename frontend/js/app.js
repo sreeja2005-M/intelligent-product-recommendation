@@ -13,16 +13,31 @@ const API_BASE_URL = isLocalhost ? window.location.origin : RENDER_BACKEND_URL;
 
 const searchButton = document.getElementById("searchBtn");
 const searchInput = document.getElementById("productSearch");
+const uploadImageBtn = document.getElementById("uploadImageBtn");
+const productImageInput = document.getElementById("productImageInput");
+const searchBoxContainer = document.getElementById("searchBoxContainer");
+
+const imagePreviewContainer = document.getElementById("imagePreviewContainer");
+const imagePreviewThumb = document.getElementById("imagePreviewThumb");
+const imageDetectedTitle = document.getElementById("imageDetectedTitle");
+const imageDetectedSubtitle = document.getElementById("imageDetectedSubtitle");
+const visionStatusPill = document.getElementById("visionStatusPill");
+const visionScanOverlay = document.getElementById("visionScanOverlay");
+const removeImageBtn = document.getElementById("removeImageBtn");
 
 const procedureSection = document.getElementById("procedureSection");
 const analysisSection = document.getElementById("analysisSection");
 
+// Image Upload State
+let currentImageBase64 = null;
+let detectedImageProductName = "";
+let isImageScanning = false;
 
 function fillSearch(term) {
+    removeImage();
     searchInput.value = term;
     searchProduct();
 }
-
 
 searchInput.addEventListener("keypress", (event) => {
     if (event.key === "Enter") {
@@ -32,8 +47,273 @@ searchInput.addEventListener("keypress", (event) => {
 
 searchButton.addEventListener("click", searchProduct);
 
+// Photo Upload Button & Input Listeners
+if (uploadImageBtn && productImageInput) {
+    uploadImageBtn.addEventListener("click", () => {
+        productImageInput.click();
+    });
 
-async function fetchPipelineData(query) {
+    productImageInput.addEventListener("change", (e) => {
+        if (e.target.files && e.target.files[0]) {
+            handleImageUpload(e.target.files[0]);
+        }
+    });
+}
+
+if (removeImageBtn) {
+    removeImageBtn.addEventListener("click", removeImage);
+}
+
+// Drag & Drop Support on Search Container
+if (searchBoxContainer) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+        searchBoxContainer.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            searchBoxContainer.classList.add('drag-over');
+        });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        searchBoxContainer.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            searchBoxContainer.classList.remove('drag-over');
+        });
+    });
+
+    searchBoxContainer.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        if (dt && dt.files && dt.files[0]) {
+            handleImageUpload(dt.files[0]);
+        }
+    });
+}
+
+// Clipboard Paste Support (Ctrl+V with image)
+window.addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+    if (!items) return;
+    for (const item of items) {
+        if (item.type && item.type.startsWith('image/')) {
+            const blob = item.getAsFile();
+            if (blob) {
+                handleImageUpload(blob);
+                break;
+            }
+        }
+    }
+});
+
+function handleImageUpload(file) {
+    if (!file || !file.type.startsWith('image/')) {
+        alert('Please upload a valid product image file (PNG, JPG, WEBP).');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        currentImageBase64 = e.target.result;
+        detectedImageProductName = "";
+
+        // Show preview immediately
+        if (imagePreviewContainer && imagePreviewThumb) {
+            imagePreviewThumb.src = currentImageBase64;
+            imagePreviewContainer.style.display = "block";
+            if (visionScanOverlay) visionScanOverlay.style.display = "block";
+            if (visionStatusPill) {
+                visionStatusPill.className = "vision-status-pill scanning";
+                visionStatusPill.textContent = "AI Vision Scanning...";
+            }
+            if (imageDetectedTitle) imageDetectedTitle.textContent = "Scanning product photo...";
+            if (imageDetectedSubtitle) imageDetectedSubtitle.textContent = "AI is identifying brand, packaging text & model...";
+        }
+
+        // Run Vision / OCR analysis
+        await identifyProductFromImage(currentImageBase64, searchInput.value.trim());
+    };
+    reader.readAsDataURL(file);
+}
+
+async function identifyProductFromImage(base64Data, hint = "") {
+    isImageScanning = true;
+
+    // 1. Try serverless Gemini Vision endpoint first
+    try {
+        const response = await fetch("/.netlify/functions/identify-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: base64Data, hint: hint })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result && result.status === "SUCCESS" && result.product_name) {
+                applyDetectedProduct(result.product_name, result.brand, result.category, "Gemini Vision");
+                isImageScanning = false;
+                return;
+            }
+        }
+    } catch (err) {
+        console.warn("Serverless vision call note:", err.message);
+    }
+
+    // 2. Fallback to in-browser Tesseract OCR
+    if (window.Tesseract) {
+        try {
+            if (visionStatusPill) {
+                visionStatusPill.textContent = "Reading Packaging Text...";
+            }
+            const ocrResult = await Tesseract.recognize(base64Data, 'eng');
+            const rawText = ocrResult?.data?.text || "";
+            const extracted = extractProductInfoFromOcr(rawText);
+
+            if (extracted && extracted.productName) {
+                applyDetectedProduct(extracted.productName, extracted.brand, extracted.category, "Visual OCR");
+                isImageScanning = false;
+                return;
+            }
+        } catch (ocrErr) {
+            console.warn("Client OCR note:", ocrErr.message);
+        }
+    }
+
+    // 3. Fallback: photo attached without recognized text
+    if (visionScanOverlay) visionScanOverlay.style.display = "none";
+    if (visionStatusPill) {
+        visionStatusPill.className = "vision-status-pill";
+        visionStatusPill.textContent = "Photo Attached";
+    }
+    if (imageDetectedTitle) imageDetectedTitle.textContent = "Product photo attached";
+    if (imageDetectedSubtitle) imageDetectedSubtitle.textContent = "Click 'Analyze Product' or type model name to compare";
+    isImageScanning = false;
+}
+
+function applyDetectedProduct(productName, brand, category, source) {
+    detectedImageProductName = productName;
+    if (visionScanOverlay) visionScanOverlay.style.display = "none";
+    if (visionStatusPill) {
+        visionStatusPill.className = "vision-status-pill success";
+        visionStatusPill.textContent = `✓ ${source} Detected`;
+    }
+    if (imageDetectedTitle) imageDetectedTitle.textContent = productName;
+    if (imageDetectedSubtitle) {
+        imageDetectedSubtitle.textContent = `${brand ? brand + ' • ' : ''}${category || 'E-Commerce'} — Ready to compare prices`;
+    }
+
+    // Populate search input so user can inspect or edit
+    if (!searchInput.value.trim() || searchInput.value.startsWith("http")) {
+        searchInput.value = productName;
+    }
+}
+
+function removeImage() {
+    currentImageBase64 = null;
+    const oldDetected = detectedImageProductName;
+    detectedImageProductName = "";
+    if (imagePreviewContainer) imagePreviewContainer.style.display = "none";
+    if (productImageInput) productImageInput.value = "";
+    if (searchInput.value === oldDetected) {
+        searchInput.value = "";
+    }
+}
+
+function extractProductInfoFromOcr(rawText) {
+    if (!rawText || typeof rawText !== 'string') return null;
+
+    const lower = rawText.toLowerCase();
+
+    // Known Brands dictionary
+    const brandMap = [
+        { key: "mars", name: "MARS", cat: "Beauty & Personal Care" },
+        { key: "maybelline", name: "Maybelline", cat: "Beauty & Personal Care" },
+        { key: "lakme", name: "Lakme", cat: "Beauty & Personal Care" },
+        { key: "nykaa", name: "Nykaa", cat: "Beauty & Personal Care" },
+        { key: "sugar", name: "Sugar Cosmetics", cat: "Beauty & Personal Care" },
+        { key: "mamaearth", name: "Mamaearth", cat: "Beauty & Personal Care" },
+        { key: "plum", name: "Plum Goodness", cat: "Beauty & Personal Care" },
+        { key: "minimalist", name: "Minimalist", cat: "Beauty & Personal Care" },
+        { key: "dot & key", name: "Dot & Key", cat: "Beauty & Personal Care" },
+        { key: "biotique", name: "Biotique", cat: "Beauty & Personal Care" },
+        { key: "cetaphil", name: "Cetaphil", cat: "Beauty & Personal Care" },
+        { key: "l'oreal", name: "L'Oreal", cat: "Beauty & Personal Care" },
+        { key: "iphone", name: "Apple", cat: "Electronics" },
+        { key: "apple", name: "Apple", cat: "Electronics" },
+        { key: "samsung", name: "Samsung", cat: "Electronics" },
+        { key: "realme", name: "Realme", cat: "Electronics" },
+        { key: "redmi", name: "Redmi", cat: "Electronics" },
+        { key: "oneplus", name: "OnePlus", cat: "Electronics" },
+        { key: "vivo", name: "Vivo", cat: "Electronics" },
+        { key: "oppo", name: "Oppo", cat: "Electronics" },
+        { key: "poco", name: "Poco", cat: "Electronics" },
+        { key: "boat", name: "boAt", cat: "Electronics" },
+        { key: "noise", name: "Noise", cat: "Electronics" },
+        { key: "fire-boltt", name: "Fire-Boltt", cat: "Electronics" },
+        { key: "sony", name: "Sony", cat: "Electronics" },
+        { key: "leezaa", name: "Leezaa", cat: "Fashion" },
+        { key: "safari", name: "Safari", cat: "Bags & Luggage" }
+    ];
+
+    let matchedBrand = null;
+    for (const b of brandMap) {
+        if (new RegExp(`\\b${b.key}\\b`, 'i').test(rawText)) {
+            if (b.key === "vivo" && /in[- ]vivo/i.test(rawText)) continue;
+            matchedBrand = b;
+            break;
+        }
+    }
+
+    const productCues = [
+        "lip liner", "lipliner", "lipstick", "lip gloss", "lip balm", "kajal", "eyeliner", "mascara",
+        "serum", "sunscreen", "moisturizer", "face wash", "compact powder", "foundation",
+        "iphone 16 pro max", "iphone 16 pro", "iphone 16", "iphone 15", "iphone 14", "iphone 13",
+        "galaxy s24", "galaxy s23", "smartwatch", "earbuds", "headphones", "bluetooth headset",
+        "kurta", "kurti", "saree", "backpack"
+    ];
+
+    let matchedCue = null;
+    for (const cue of productCues) {
+        if (lower.includes(cue)) {
+            matchedCue = cue;
+            break;
+        }
+    }
+
+    let variant = "";
+    const shadeMatch = rawText.match(/\b(\d{1,2}[-\s]+[A-Za-z]+(?:\s+[A-Za-z]+)?)\b/);
+    if (shadeMatch && !/^\d+\s*(?:ml|g|gm|kg|pcs|pack|cm|mm)$/i.test(shadeMatch[1])) {
+        variant = shadeMatch[1].trim();
+    }
+    const storageMatch = rawText.match(/\b(64|128|256|512)\s*(?:gb|tb)\b/i);
+    if (storageMatch) {
+        variant = storageMatch[0].toUpperCase();
+    }
+
+    const lines = rawText.split('\n')
+        .map(l => l.replace(/[^a-zA-Z0-9\s-]/g, ' ').replace(/\s+/g, ' ').trim())
+        .filter(l => l.length >= 4 && !/^(net|mfg|exp|batch|qty|mrp|ingredients|customer|warning|barcode|store|keep|made in)/i.test(l));
+
+    let detectedName = "";
+    if (matchedBrand && matchedCue) {
+        const cueTitle = matchedCue.replace(/\b\w/g, c => c.toUpperCase());
+        detectedName = `${matchedBrand.name} ${cueTitle}${variant ? ' - ' + variant : ''}`;
+    } else if (matchedBrand && lines.length > 0) {
+        const bestLine = lines.find(l => l.toLowerCase().includes(matchedBrand.key)) || lines[0];
+        detectedName = `${matchedBrand.name} ${bestLine.replace(new RegExp(`\\b${matchedBrand.key}\\b`, 'gi'), '').trim()}`;
+    } else if (lines.length > 0) {
+        detectedName = lines[0].slice(0, 45);
+    }
+
+    if (!detectedName || detectedName.trim().length < 3) return null;
+
+    return {
+        productName: detectedName.replace(/\s+/g, ' ').trim(),
+        brand: matchedBrand ? matchedBrand.name : null,
+        category: matchedBrand ? matchedBrand.cat : 'General'
+    };
+}
+
+async function fetchPipelineData(query, image = null) {
     const candidateUrls = [
         "/api/analyze-full",
         "/.netlify/functions/analyze",
@@ -45,10 +325,13 @@ async function fetchPipelineData(query) {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 12000);
 
+            const payload = { query: query };
+            if (image) payload.image = image;
+
             const response = await fetch(endpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query: query }),
+                body: JSON.stringify(payload),
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
@@ -69,10 +352,16 @@ async function fetchPipelineData(query) {
 }
 
 async function searchProduct() {
-    const query = searchInput.value.trim();
+    let query = searchInput.value.trim();
 
-    if (!query) {
-        alert("Please paste a product URL or enter a product name.");
+    // Support ONLY IMAGE: If user uploaded a photo without typing or link
+    if (!query && currentImageBase64) {
+        query = detectedImageProductName || "Product from photo";
+        searchInput.value = query;
+    }
+
+    if (!query && !currentImageBase64) {
+        alert("Please paste a product URL, enter a product name, or upload a product photo.");
         return;
     }
 
@@ -90,15 +379,19 @@ async function searchProduct() {
 
     try {
         // Step 1: Input Received
-        setStepStatus(1, "active", "Input Parsed & Verified");
+        const isUrl = query.startsWith("http://") || query.startsWith("https://") || query.startsWith("www.");
+        const inputDesc = currentImageBase64
+            ? (isUrl ? `📷 Photo & Link: ${query.slice(0, 35)}...` : `📷 Photo: ${query}`)
+            : (isUrl ? `Link Verified: ${query.slice(0, 40)}...` : `Product Query: ${query}`);
+        setStepStatus(1, "active", inputDesc);
         await delay(400);
 
         // Step 2: Fresh Data Collection
-        setStepStatus(1, "completed", "Input Ready");
-        setStepStatus(2, "active", "Scraping Amazon, Flipkart, Croma...");
+        setStepStatus(1, "completed", currentImageBase64 ? "Photo & Input Ready" : "Input Ready");
+        setStepStatus(2, "active", "Scraping Multi-Store Live Retail Prices...");
         
-        // Fetch API response (with live attempt & seamless AI simulation fallback)
-        const data = await fetchPipelineData(query);
+        // Fetch API response
+        const data = await fetchPipelineData(query, currentImageBase64);
 
         // Animate remaining steps
         await delay(500);
@@ -220,6 +513,7 @@ function resetHeroCard() {
 
 function resetSearch() {
     searchInput.value = "";
+    removeImage();
     procedureSection.style.display = "none";
     analysisSection.style.display = "none";
     resetHeroCard();
@@ -283,6 +577,19 @@ function renderDashboard(data) {
     document.getElementById("recValueScore").textContent = rec.value_score.toFixed(1);
     document.getElementById("recBestStorePrice").textContent = `${rec.best_website} — ₹${rec.recommended_price.toLocaleString('en-IN')}`;
     document.getElementById("recReasonText").textContent = rec.recommendation_reason;
+
+    // Display product photo in hero card
+    const recProductImageWrap = document.getElementById("recProductImageWrap");
+    const recProductImage = document.getElementById("recProductImage");
+    if (recProductImage && recProductImageWrap) {
+        const imgSrc = currentImageBase64 || (prod && prod.image_url);
+        if (imgSrc) {
+            recProductImage.src = imgSrc;
+            recProductImageWrap.style.display = "block";
+        } else {
+            recProductImageWrap.style.display = "none";
+        }
+    }
 
     // 3. Multi-Store Price Comparison Grid
     const priceContainer = document.getElementById("priceContainer");

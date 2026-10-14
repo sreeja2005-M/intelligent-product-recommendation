@@ -2094,4 +2094,238 @@ footer > p {
     .analytics-card.full-width {
         grid-column: span 1;
     }
-}
+}
+
+/* ================= PHOTO SEARCH & AI VISION STYLES ================= */
+
+.upload-image-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    margin-right: 8px;
+    background: rgba(139, 92, 246, 0.15);
+    border: 1px solid rgba(139, 92, 246, 0.45);
+    border-radius: 9px;
+    color: #c4b5fd;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+}
+
+.upload-image-btn:hover {
+    background: rgba(139, 92, 246, 0.3);
+    border-color: rgba(167, 139, 250, 0.7);
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(139, 92, 246, 0.35);
+}
+
+.upload-image-btn .cam-icon {
+    font-size: 15px;
+}
+
+.search-box.drag-over {
+    border-color: #8b5cf6 !important;
+    box-shadow: 0 0 25px rgba(139, 92, 246, 0.6), inset 0 0 15px rgba(139, 92, 246, 0.2) !important;
+    background: rgba(139, 92, 246, 0.1) !important;
+}
+
+.image-preview-container {
+    width: 100%;
+    max-width: 610px;
+    margin-top: 14px;
+    animation: fadeInDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.image-preview-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 14px;
+    background: rgba(18, 24, 43, 0.9);
+    border: 1px solid rgba(139, 92, 246, 0.35);
+    border-radius: 12px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.image-preview-thumb-wrap {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: #0f172a;
+}
+
+.image-preview-thumb-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.vision-scan-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(139, 92, 246, 0.25);
+    pointer-events: none;
+}
+
+.scan-laser {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #38bdf8, #a855f7, transparent);
+    box-shadow: 0 0 8px #38bdf8;
+    animation: scanLaserAnim 1.4s infinite ease-in-out;
+}
+
+@keyframes scanLaserAnim {
+    0% { top: 0%; opacity: 0.8; }
+    50% { top: 100%; opacity: 1; }
+    100% { top: 0%; opacity: 0.8; }
+}
+
+.image-preview-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.preview-badge-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 3px;
+}
+
+.preview-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #a78bfa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #34d399;
+    box-shadow: 0 0 6px #34d399;
+}
+
+.vision-status-pill {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+}
+
+.vision-status-pill.scanning {
+    background: rgba(139, 92, 246, 0.25);
+    color: #c4b5fd;
+    animation: pulseStatus 1.2s infinite ease-in-out;
+}
+
+.vision-status-pill.success {
+    background: rgba(16, 185, 129, 0.2);
+    color: #6ee7b7;
+}
+
+@keyframes pulseStatus {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(0.98); }
+}
+
+.detected-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f1f5f9;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.detected-sub {
+    font-size: 11px;
+    color: #94a3b8;
+    margin: 2px 0 0 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.remove-image-btn {
+    border: none;
+    background: rgba(255, 255, 255, 0.06);
+    color: #94a3b8;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.remove-image-btn:hover {
+    background: rgba(239, 68, 68, 0.25);
+    color: #fca5a5;
+    transform: scale(1.1);
+}
+
+/* RECOMMENDATION HERO CARD WITH PRODUCT IMAGE */
+.rec-card-inner {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.rec-product-image-wrap {
+    width: 88px;
+    height: 88px;
+    border-radius: 12px;
+    overflow: hidden;
+    flex-shrink: 0;
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    background: #0f172a;
+}
+
+.rec-product-image-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.rec-main-details {
+    flex: 1;
+    min-width: 0;
+}
+
+@media (max-width: 640px) {
+    .rec-card-inner {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .rec-product-image-wrap {
+        width: 72px;
+        height: 72px;
+    }
+}
+

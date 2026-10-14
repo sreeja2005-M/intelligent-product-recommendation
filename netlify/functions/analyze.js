@@ -1042,21 +1042,26 @@ exports.handler = async function (event, context) {
     }
 
     let query = '';
+    let inputImage = null;
     try {
         if (event.body) {
             const parsed = JSON.parse(event.body);
             query = (parsed.query || parsed.url || '').trim();
+            inputImage = parsed.image || parsed.imageUrl || null;
         }
     } catch (e) {
         query = (event.queryStringParameters && event.queryStringParameters.query) || '';
     }
 
-    if (!query) {
+    if (!query && !inputImage) {
         return {
             statusCode: 400,
             headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'ERROR', message: 'Query or URL is required.' })
+            body: JSON.stringify({ status: 'ERROR', message: 'Query, URL, or Product Image is required.' })
         };
+    }
+    if (!query && inputImage) {
+        query = "Identified Product";
     }
 
     const isUrl = query.startsWith('http://') || query.startsWith('https://') || query.startsWith('www.');
@@ -1487,7 +1492,7 @@ exports.handler = async function (event, context) {
             product_name: productName,
             brand: extracted.brand || (text.includes("mars") ? "MARS" : (category === "Beauty & Personal Care" ? "Beauty Brand" : (isFashion ? "Leezaa Collection" : "Featured Brand"))),
             category: category,
-            image_url: extracted.imageUrl
+            image_url: inputImage || extracted.imageUrl
         },
         prices: priceList,
         sentiment_analysis: {

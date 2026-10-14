@@ -59,7 +59,7 @@
                 </p>
 
                 <!-- SEARCH BOX -->
-                <div class="search-box">
+                <div class="search-box" id="searchBoxContainer">
 
                     <div class="search-icon">
                         🔍
@@ -67,14 +67,42 @@
 
                     <input
                         type="text"
-                        placeholder="Paste ANY product link OR type product name..."
+                        placeholder="Paste product link, type name, OR upload a photo..."
                         id="productSearch"
                     >
+
+                    <!-- CAMERA / PHOTO UPLOAD BUTTON -->
+                    <button type="button" id="uploadImageBtn" class="upload-image-btn" title="Upload or capture product photo">
+                        <span class="cam-icon">📷</span>
+                        <span class="cam-label">Photo</span>
+                    </button>
+                    <input type="file" id="productImageInput" accept="image/*" style="display: none;">
 
                     <button id="searchBtn">
                         Analyze Product
                     </button>
 
+                </div>
+
+                <!-- IMAGE PREVIEW CONTAINER -->
+                <div id="imagePreviewContainer" class="image-preview-container" style="display: none;">
+                    <div class="image-preview-card">
+                        <div class="image-preview-thumb-wrap">
+                            <img id="imagePreviewThumb" src="" alt="Product Photo Preview">
+                            <div id="visionScanOverlay" class="vision-scan-overlay" style="display: none;">
+                                <div class="scan-laser"></div>
+                            </div>
+                        </div>
+                        <div class="image-preview-info">
+                            <div class="preview-badge-row">
+                                <span class="preview-badge"><span class="badge-dot"></span> Photo Loaded</span>
+                                <span id="visionStatusPill" class="vision-status-pill">Ready</span>
+                            </div>
+                            <h4 id="imageDetectedTitle" class="detected-title">Scanning product...</h4>
+                            <p id="imageDetectedSubtitle" class="detected-sub">Click Analyze Product to compare prices across stores</p>
+                        </div>
+                        <button type="button" id="removeImageBtn" class="remove-image-btn" title="Remove photo">✕</button>
+                    </div>
                 </div>
 
                 <div class="search-hint">
@@ -288,19 +316,26 @@
 
             <!-- 1. RECOMMENDATION HERO CARD -->
             <div class="recommendation-hero-card" id="recHeroCard">
-                <div class="rec-header">
-                    <div class="rec-badge-container">
-                        <span class="decision-badge" id="recDecisionBadge">BUY NOW</span>
-                        <span class="value-score-pill">Value Score: <strong id="recValueScore">85.4</strong>/100</span>
+                <div class="rec-card-inner">
+                    <div id="recProductImageWrap" class="rec-product-image-wrap" style="display: none;">
+                        <img id="recProductImage" src="" alt="Analyzed Product">
                     </div>
-                    <div class="rec-store-price">
-                        <small>Best Store & Price</small>
-                        <h3 id="recBestStorePrice">Amazon — ₹2,499.00</h3>
+                    <div class="rec-main-details">
+                        <div class="rec-header">
+                            <div class="rec-badge-container">
+                                <span class="decision-badge" id="recDecisionBadge">BUY NOW</span>
+                                <span class="value-score-pill">Value Score: <strong id="recValueScore">85.4</strong>/100</span>
+                            </div>
+                            <div class="rec-store-price">
+                                <small>Best Store & Price</small>
+                                <h3 id="recBestStorePrice">Amazon — ₹2,499.00</h3>
+                            </div>
+                        </div>
+                        <p class="rec-reason" id="recReasonText">
+                            Loading recommendation reasoning...
+                        </p>
                     </div>
                 </div>
-                <p class="rec-reason" id="recReasonText">
-                    Loading recommendation reasoning...
-                </p>
             </div>
 
 
@@ -494,7 +529,8 @@
     </footer>
 
 
-    <script src="js/app.js?v=2.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="js/app.js?v=2.2"></script>
 
 </body>
 </html>

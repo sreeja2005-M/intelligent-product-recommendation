@@ -1,3 +1,4 @@
+from typing import Optional
 from pathlib import Path
 
 from fastapi import FastAPI, Depends
@@ -280,7 +281,8 @@ class ProductURLRequest(BaseModel):
 
 
 class AnalyzeQueryRequest(BaseModel):
-    query: str
+    query: Optional[str] = ""
+    image: Optional[str] = None
 
 
 from backend.pipeline import run_full_recommendation_pipeline
@@ -290,10 +292,15 @@ def analyze_full_pipeline(
     request: AnalyzeQueryRequest,
     db: Session = Depends(get_db)
 ):
-    if not request.query or not request.query.strip():
-        return {"status": "ERROR", "message": "Please provide a product URL or product name."}
+    query_str = (request.query or "").strip()
+    if not query_str and not request.image:
+        return {"status": "ERROR", "message": "Please provide a product URL, product name, or product photo."}
 
-    return run_full_recommendation_pipeline(request.query, db)
+    effective_query = query_str or "Product from photo"
+    result = run_full_recommendation_pipeline(effective_query, db)
+    if request.image and isinstance(result, dict) and "product" in result:
+        result["product"]["image_url"] = request.image
+    return result
 
 
 @app.post("/analyze-url")
