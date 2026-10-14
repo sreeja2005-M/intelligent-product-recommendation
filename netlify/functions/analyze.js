@@ -1422,6 +1422,11 @@ exports.handler = async function (event, context) {
 
     let platformNotice = null;
     if (isUrl && sourceStoreName) {
+        const storeNamesList = priceList.map(p => p.website_name).filter((v, i, a) => a.indexOf(v) === i);
+        const storesText = storeNamesList.length > 1
+            ? storeNamesList.slice(0, -1).join(', ') + ', and ' + storeNamesList[storeNamesList.length - 1]
+            : storeNamesList.join('');
+
         if (isPlatformExclusive) {
             platformNotice = {
                 title: `Verified ${sourceStoreName} Exclusive Deal & Multi-Store Transparency`,
@@ -1434,7 +1439,7 @@ exports.handler = async function (event, context) {
             const savings = basePrice - lowestStore.current_price;
             platformNotice = {
                 title: `Better Deal Found! Save ₹${savings.toLocaleString('en-IN')} on ${lowestStore.website_name}`,
-                message: `You provided a link to <b>${sourceStoreName}</b> (₹${basePrice.toLocaleString('en-IN')}), but <b>${lowestStore.website_name}</b> offers the exact model at <b>₹${lowestStore.current_price.toLocaleString('en-IN')}</b> (${lowestStore.discount_percent}% OFF). Comparing live retail pricing across <b>Amazon, Flipkart, Croma, Reliance Digital</b>, and <b>Vijay Sales</b>.`,
+                message: `You provided a link to <b>${sourceStoreName}</b> (₹${basePrice.toLocaleString('en-IN')}), but <b>${lowestStore.website_name}</b> offers the lowest price at <b>₹${lowestStore.current_price.toLocaleString('en-IN')}</b> (${lowestStore.discount_percent}% OFF). Comparing live retail pricing across <b>${storesText}</b>.`,
                 source_store: sourceStoreName,
                 source_price: basePrice,
                 is_exclusive: false
@@ -1442,7 +1447,7 @@ exports.handler = async function (event, context) {
         } else {
             platformNotice = {
                 title: `Best Deal Verified on ${sourceStoreName}`,
-                message: `Verified direct listing on <b>${sourceStoreName}</b> at <b>₹${basePrice.toLocaleString('en-IN')}</b> (${lowestStore.discount_percent}% OFF). Your source store currently offers the lowest verified price compared to other major retailers for <b>${productName}</b>.`,
+                message: `Verified direct listing on <b>${sourceStoreName}</b> at <b>₹${basePrice.toLocaleString('en-IN')}</b> (${lowestStore.discount_percent}% OFF). Your source store currently offers the lowest verified price compared across <b>${storesText}</b> for <b>${productName}</b>.`,
                 source_store: sourceStoreName,
                 source_price: basePrice,
                 is_exclusive: false
