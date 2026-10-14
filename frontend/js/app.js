@@ -105,34 +105,69 @@ window.addEventListener('paste', (e) => {
     }
 });
 
-function handleImageUpload(file) {
+function downscaleImage(file, maxDim = 1000, quality = 0.85) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                let w = img.width;
+                let h = img.height;
+                if (w > maxDim || h > maxDim) {
+                    if (w > h) {
+                        h = Math.round((h * maxDim) / w);
+                        w = maxDim;
+                    } else {
+                        w = Math.round((w * maxDim) / h);
+                        h = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = () => resolve(e.target.result);
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+async function handleImageUpload(file) {
     if (!file || !file.type.startsWith('image/')) {
         alert('Please upload a valid product image file (PNG, JPG, WEBP).');
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        currentImageBase64 = e.target.result;
-        detectedImageProductName = "";
+    try {
+        currentImageBase64 = await downscaleImage(file);
+    } catch (e) {
+        const reader = new FileReader();
+        reader.onload = (ev) => { currentImageBase64 = ev.target.result; };
+        reader.readAsDataURL(file);
+    }
 
-        // Show preview immediately
-        if (imagePreviewContainer && imagePreviewThumb) {
-            imagePreviewThumb.src = currentImageBase64;
-            imagePreviewContainer.style.display = "block";
-            if (visionScanOverlay) visionScanOverlay.style.display = "block";
-            if (visionStatusPill) {
-                visionStatusPill.className = "vision-status-pill scanning";
-                visionStatusPill.textContent = "AI Vision Scanning...";
-            }
-            if (imageDetectedTitle) imageDetectedTitle.textContent = "Scanning product photo...";
-            if (imageDetectedSubtitle) imageDetectedSubtitle.textContent = "AI is identifying brand, packaging text & model...";
+    detectedImageProductName = "";
+
+    // Show preview immediately
+    if (imagePreviewContainer && imagePreviewThumb) {
+        imagePreviewThumb.src = currentImageBase64;
+        imagePreviewContainer.style.display = "block";
+        if (visionScanOverlay) visionScanOverlay.style.display = "block";
+        if (visionStatusPill) {
+            visionStatusPill.className = "vision-status-pill scanning";
+            visionStatusPill.textContent = "AI Vision Scanning...";
         }
+        if (imageDetectedTitle) imageDetectedTitle.textContent = "Scanning product photo...";
+        if (imageDetectedSubtitle) imageDetectedSubtitle.textContent = "AI is identifying brand, packaging text & model...";
+    }
 
-        // Run Vision / OCR analysis
-        await identifyProductFromImage(currentImageBase64, searchInput.value.trim());
-    };
-    reader.readAsDataURL(file);
+    // Run Vision / OCR analysis
+    await identifyProductFromImage(currentImageBase64, searchInput.value.trim());
 }
 
 async function identifyProductFromImage(base64Data, hint = "") {
@@ -182,10 +217,14 @@ async function identifyProductFromImage(base64Data, hint = "") {
     if (visionScanOverlay) visionScanOverlay.style.display = "none";
     if (visionStatusPill) {
         visionStatusPill.className = "vision-status-pill";
-        visionStatusPill.textContent = "Photo Attached";
+        visionStatusPill.textContent = "Photo Loaded 📷";
     }
     if (imageDetectedTitle) imageDetectedTitle.textContent = "Product photo attached";
-    if (imageDetectedSubtitle) imageDetectedSubtitle.textContent = "Click 'Analyze Product' or type model name to compare";
+    if (imageDetectedSubtitle) imageDetectedSubtitle.textContent = "Type the product name above so we search the exact item across stores";
+    if (!searchInput.value.trim()) {
+        searchInput.placeholder = "Type product name for this photo (e.g. MARS Lip Liner)...";
+        searchInput.focus();
+    }
     isImageScanning = false;
 }
 
@@ -216,6 +255,7 @@ function removeImage() {
     if (searchInput.value === oldDetected) {
         searchInput.value = "";
     }
+    searchInput.placeholder = "Paste ANY product link OR upload photo...";
 }
 
 function extractProductInfoFromOcr(rawText) {
@@ -289,19 +329,32 @@ function extractProductInfoFromOcr(rawText) {
         variant = storageMatch[0].toUpperCase();
     }
 
+    const junkPhrases = [
+        "net wt", "net content", "mfg", "exp", "batch", "qty", "mrp", "ingredients", "customer",
+        "warning", "barcode", "store", "keep", "made in", "how to use", "directions", "external use"
+    ];
+
     const lines = rawText.split('\n')
         .map(l => l.replace(/[^a-zA-Z0-9\s-]/g, ' ').replace(/\s+/g, ' ').trim())
-        .filter(l => l.length >= 4 && !/^(net|mfg|exp|batch|qty|mrp|ingredients|customer|warning|barcode|store|keep|made in)/i.test(l));
+        .filter(l => l.length >= 4 && !junkPhrases.some(j => l.toLowerCase().includes(j)));
 
     let detectedName = "";
     if (matchedBrand && matchedCue) {
         const cueTitle = matchedCue.replace(/\b\w/g, c => c.toUpperCase());
         detectedName = `${matchedBrand.name} ${cueTitle}${variant ? ' - ' + variant : ''}`;
     } else if (matchedBrand && lines.length > 0) {
-        const bestLine = lines.find(l => l.toLowerCase().includes(matchedBrand.key)) || lines[0];
-        detectedName = `${matchedBrand.name} ${bestLine.replace(new RegExp(`\\b${matchedBrand.key}\\b`, 'gi'), '').trim()}`;
-    } else if (lines.length > 0) {
-        detectedName = lines[0].slice(0, 45);
+        const bestLine = lines.find(l => l.toLowerCase().includes(matchedBrand.key.toLowerCase()));
+        if (bestLine) {
+            detectedName = bestLine.replace(/[^a-zA-Z0-9\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+        } else {
+            detectedName = `${matchedBrand.name} Product`;
+        }
+    } else if (matchedCue) {
+        const cueTitle = matchedCue.replace(/\b\w/g, c => c.toUpperCase());
+        detectedName = `${cueTitle}${variant ? ' - ' + variant : ''}`;
+    } else {
+        // Strict: never return random junk lines!
+        return null;
     }
 
     if (!detectedName || detectedName.trim().length < 3) return null;
@@ -352,15 +405,27 @@ async function fetchPipelineData(query, image = null) {
 }
 
 async function searchProduct() {
-    let query = searchInput.value.trim();
-
-    // Support ONLY IMAGE: If user uploaded a photo without typing or link
-    if (!query && currentImageBase64) {
-        query = detectedImageProductName || "Product from photo";
-        searchInput.value = query;
+    if (isImageScanning) {
+        alert("AI Vision is still analyzing your photo. Please wait a moment!");
+        return;
     }
 
-    if (!query && !currentImageBase64) {
+    let query = searchInput.value.trim();
+
+    // If query is empty and image is present
+    if (!query && currentImageBase64) {
+        if (detectedImageProductName) {
+            query = detectedImageProductName;
+            searchInput.value = query;
+        } else {
+            alert("Please type the product name (e.g. 'MARS Lip Liner' or 'iPhone 16') so our AI can find exact prices across all shopping websites.");
+            searchInput.placeholder = "Type product name (e.g. MARS Lip Liner)...";
+            searchInput.focus();
+            return;
+        }
+    }
+
+    if (!query) {
         alert("Please paste a product URL, enter a product name, or upload a product photo.");
         return;
     }

@@ -131,7 +131,11 @@ function isInvalidTitle(title) {
         'online shopping site',
         'online shopping india',
         'shopping site in india',
-        'buy products online'
+        'buy products online',
+        'product from photo',
+        'identified product',
+        'smart buy product',
+        'photo attached'
     ];
     if (invalidPatterns.some(p => t.includes(p))) return true;
 
@@ -385,8 +389,8 @@ function cleanSearchTerm(title) {
         "earbuds", "earphone", "earphones", "headphone", "headphones", "headset", "soundbar", "speaker", "tws",
         "smartwatch", "watch",
         "phone", "smartphone", "mobile", "iphone",
-        "laptop", "macbook", "tablet", "ipad",
-        "kurta", "kurti", "saree", "shirt", "tshirt", "t-shirt", "jeans", "dress", "jacket", "shoes", "sneakers"
+        "kurta", "kurti", "saree", "shirt", "tshirt", "t-shirt", "jeans", "dress", "jacket", "shoes", "sneakers",
+        "lip liner", "lipliner", "lipstick", "lip gloss", "lip balm", "kajal", "eyeliner", "mascara", "foundation", "serum", "sunscreen", "moisturizer"
     ];
 
     let resultWords = words;
@@ -447,7 +451,15 @@ function findAmazonDirectProduct(query) {
     return new Promise((resolve) => {
         try {
             const clean = cleanSearchTerm(query);
-            if (!clean) return resolve(null);
+            if (!clean || clean.length < 4 || isInvalidTitle(clean)) return resolve(null);
+            
+            const queryWords = clean.toLowerCase()
+                .replace(/[^a-z0-9\s]/g, ' ')
+                .split(/\s+/)
+                .filter(w => w.length >= 3 && !['with', 'for', 'the', 'and', 'from', 'best', 'deal', 'online', 'pack', 'product'].includes(w));
+            
+            if (queryWords.length === 0) return resolve(null);
+
             const searchUrl = 'https://www.amazon.in/s?k=' + encodeURIComponent(clean);
             const req = https.get(searchUrl, {
                 headers: {
@@ -473,10 +485,15 @@ function findAmazonDirectProduct(query) {
                         data = buf.toString('utf8');
                     }
                     const linkMatches = [...data.matchAll(/href="(\/[^"]*\/dp\/(B[A-Z0-9]{9})[^"]*)"/g)];
+                    
+                    // ONLY match if the URL slug contains at least 2 search keywords (or all keywords if only 1 keyword exists)
                     const directMatch = linkMatches.find(m => {
-                        const slug = m[1].toLowerCase();
-                        return !slug.includes('case') && !slug.includes('cover') && !slug.includes('glass') && !slug.includes('protector');
-                    }) || linkMatches[0];
+                        const slug = decodeURIComponent(m[1]).toLowerCase();
+                        if (slug.includes('case') || slug.includes('cover') || slug.includes('glass') || slug.includes('protector')) return false;
+                        const matched = queryWords.filter(w => slug.includes(w));
+                        const requiredMatches = Math.min(2, queryWords.length);
+                        return matched.length >= requiredMatches;
+                    });
 
                     if (directMatch) {
                         return resolve({
@@ -485,13 +502,7 @@ function findAmazonDirectProduct(query) {
                         });
                     }
 
-                    const asinMatch = data.match(/data-asin="(B[A-Z0-9]{9})"/);
-                    if (asinMatch && asinMatch[1]) {
-                        return resolve({
-                            asin: asinMatch[1],
-                            url: `https://www.amazon.in/dp/${asinMatch[1]}`
-                        });
-                    }
+                    // Strict: if not verified, return null so it falls back to exact search URL!
                     resolve(null);
                 });
             });
@@ -507,7 +518,15 @@ function findFlipkartDirectProduct(query) {
     return new Promise((resolve) => {
         try {
             const clean = cleanSearchTerm(query);
-            if (!clean) return resolve(null);
+            if (!clean || clean.length < 4 || isInvalidTitle(clean)) return resolve(null);
+            
+            const queryWords = clean.toLowerCase()
+                .replace(/[^a-z0-9\s]/g, ' ')
+                .split(/\s+/)
+                .filter(w => w.length >= 3 && !['with', 'for', 'the', 'and', 'from', 'best', 'deal', 'online', 'pack', 'product'].includes(w));
+            
+            if (queryWords.length === 0) return resolve(null);
+
             const searchUrl = 'https://www.flipkart.com/search?q=' + encodeURIComponent(clean);
             const req = https.get(searchUrl, {
                 headers: {
@@ -532,10 +551,15 @@ function findFlipkartDirectProduct(query) {
                         html = buf.toString('utf8');
                     }
                     const linkMatches = [...html.matchAll(/href="(\/[^"]*\/p\/(itm[a-zA-Z0-9]+)[^"]*)"/g)];
+                    
+                    // ONLY match if the URL slug contains at least 2 search keywords
                     const directMatch = linkMatches.find(m => {
-                        const slug = m[1].toLowerCase();
-                        return !slug.includes('case') && !slug.includes('cover') && !slug.includes('glass') && !slug.includes('tempered') && !slug.includes('protector');
-                    }) || linkMatches[0];
+                        const slug = decodeURIComponent(m[1]).toLowerCase();
+                        if (slug.includes('case') || slug.includes('cover') || slug.includes('glass') || slug.includes('tempered') || slug.includes('protector')) return false;
+                        const matched = queryWords.filter(w => slug.includes(w));
+                        const requiredMatches = Math.min(2, queryWords.length);
+                        return matched.length >= requiredMatches;
+                    });
 
                     if (directMatch) {
                         const directSlug = directMatch[1].split('?')[0];
@@ -544,6 +568,8 @@ function findFlipkartDirectProduct(query) {
                             url: 'https://www.flipkart.com' + directSlug
                         });
                     }
+
+                    // Strict: if not verified, return null so it falls back to exact search URL!
                     resolve(null);
                 });
             });
@@ -1053,15 +1079,15 @@ exports.handler = async function (event, context) {
         query = (event.queryStringParameters && event.queryStringParameters.query) || '';
     }
 
-    if (!query && !inputImage) {
+    if (!query || isInvalidTitle(query)) {
         return {
             statusCode: 400,
             headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'ERROR', message: 'Query, URL, or Product Image is required.' })
+            body: JSON.stringify({
+                status: 'ERROR',
+                message: 'Please provide or verify the product name so our AI can find exact matching listings across stores.'
+            })
         };
-    }
-    if (!query && inputImage) {
-        query = "Identified Product";
     }
 
     const isUrl = query.startsWith('http://') || query.startsWith('https://') || query.startsWith('www.');

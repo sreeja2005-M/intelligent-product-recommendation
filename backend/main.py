@@ -293,11 +293,10 @@ def analyze_full_pipeline(
     db: Session = Depends(get_db)
 ):
     query_str = (request.query or "").strip()
-    if not query_str and not request.image:
-        return {"status": "ERROR", "message": "Please provide a product URL, product name, or product photo."}
+    if not query_str or query_str.lower() in ["product from photo", "identified product", "smart buy product"]:
+        return {"status": "ERROR", "message": "Please provide a valid product URL or product name."}
 
-    effective_query = query_str or "Product from photo"
-    result = run_full_recommendation_pipeline(effective_query, db)
+    result = run_full_recommendation_pipeline(query_str, db)
     if request.image and isinstance(result, dict) and "product" in result:
         result["product"]["image_url"] = request.image
     return result
