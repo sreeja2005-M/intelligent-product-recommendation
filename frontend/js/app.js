@@ -1160,7 +1160,11 @@ function getStoreSearchUrl(storeName, cleanTerm) {
     } else if (store.includes('vijay')) {
         return `https://www.vijaysales.com/search?q=${encoded}`;
     } else if (store.includes('myntra')) {
-        return `https://www.myntra.com/search?q=${encoded}`;
+        const slug = cleanTerm.toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, '')
+            .trim()
+            .replace(/\s+/g, '-');
+        return `https://www.myntra.com/${slug}`;
     } else if (store.includes('ajio')) {
         return `https://www.ajio.com/search/?text=${encoded}`;
     } else if (store.includes('tata')) {
@@ -1439,7 +1443,7 @@ function generateMockPipelineData(query) {
             stores: [
                 { name: "Flipkart", price: 799, url: "https://www.flipkart.com/safari-ashper-cb-6-pockets-30-l-laptop-backpack/p/itm2139818817", avail: "In Stock (Exact Model)", action: "Buy on Flipkart ↗ (Exact Model)" },
                 { name: "Amazon", price: 849, url: "https://www.amazon.in/dp/B09S9QG3M4", avail: "In Stock (Exact Model)", action: "Buy on Amazon ↗ (Exact Model)" },
-                { name: "Myntra", price: 899, url: "https://www.myntra.com/search?q=Safari%20Ashper%20Laptop%20Backpack", avail: "In Stock", action: "Search on Myntra ↗" }
+                { name: "Myntra", price: 899, url: "https://www.myntra.com/safari-ashper-laptop-backpack", avail: "In Stock", action: "Search on Myntra ↗" }
             ]
         },
         {
@@ -1523,9 +1527,9 @@ function generateMockPipelineData(query) {
                 { name: "Amazon", mult: 1.0, avail: "In Stock", url: amazonUrl },
                 { name: "Flipkart", mult: 1.0, avail: "In Stock", url: flipkartUrl },
                 { name: "Nykaa", mult: 1.0, avail: "In Stock", url: nykaaUrl },
-                { name: "Purplle", mult: 0.98, avail: "In Stock", url: purplleUrl },
+                { name: "Purplle", mult: 1.0, avail: "In Stock", url: purplleUrl },
                 { name: "Myntra", mult: 1.02, avail: "In Stock", url: myntraUrl },
-                { name: "Meesho", mult: 0.95, avail: "In Stock", url: meeshoUrl }
+                { name: "Meesho", mult: 1.0, avail: "In Stock", url: meeshoUrl }
             ];
         } else if (category === "Fashion") {
             const flipkartUrl = (sourceStoreName === "Flipkart") ? query : getStoreSearchUrl('Flipkart', cleanTerm);
@@ -1537,11 +1541,11 @@ function generateMockPipelineData(query) {
 
             stores = [
                 { name: "Flipkart", mult: 1.0, avail: "In Stock", url: flipkartUrl },
-                { name: "Meesho", mult: 0.95, avail: "In Stock", url: meeshoUrl },
-                { name: "Amazon", mult: 1.05, avail: "In Stock", url: amazonUrl },
-                { name: "Myntra", mult: 1.10, avail: "In Stock", url: myntraUrl },
-                { name: "Ajio", mult: 1.08, avail: "In Stock", url: ajioUrl },
-                { name: "Tata CLiQ", mult: 1.12, avail: "In Stock", url: tataUrl }
+                { name: "Meesho", mult: 1.0, avail: "In Stock", url: meeshoUrl },
+                { name: "Amazon", mult: 1.0, avail: "In Stock", url: amazonUrl },
+                { name: "Myntra", mult: 1.02, avail: "In Stock", url: myntraUrl },
+                { name: "Ajio", mult: 1.02, avail: "In Stock", url: ajioUrl },
+                { name: "Tata CLiQ", mult: 1.04, avail: "In Stock", url: tataUrl }
             ];
         } else {
             const flipkartUrl = (sourceStoreName === "Flipkart") ? query : getStoreSearchUrl('Flipkart', cleanTerm);
@@ -1551,10 +1555,10 @@ function generateMockPipelineData(query) {
             const ajioUrl = (sourceStoreName === "Ajio") ? query : getStoreSearchUrl('Ajio', cleanTerm);
 
             stores = [
-                { name: "Flipkart", mult: 0.98, avail: "In Stock", url: flipkartUrl },
+                { name: "Flipkart", mult: 1.0, avail: "In Stock", url: flipkartUrl },
                 { name: "Amazon", mult: 1.0, avail: "In Stock", url: amazonUrl },
-                { name: "Meesho", mult: 0.95, avail: "In Stock", url: meeshoUrl },
-                { name: "Myntra", mult: 1.04, avail: "In Stock", url: myntraUrl },
+                { name: "Meesho", mult: 1.0, avail: "In Stock", url: meeshoUrl },
+                { name: "Myntra", mult: 1.02, avail: "In Stock", url: myntraUrl },
                 { name: "Ajio", mult: 1.02, avail: "In Stock", url: ajioUrl }
             ];
         }
@@ -1628,16 +1632,22 @@ function generateMockPipelineData(query) {
     if (isPlatformExclusive) {
         lowestPriceObj = prices.find(p => p.is_source) || prices[0];
     } else {
-        lowestPriceObj = prices.reduce((prev, curr) => (prev.current_price < curr.current_price ? prev : curr));
+        const exactMatches = prices.filter(p => p.is_source || p.is_exact_match);
+        const candidates = exactMatches.length > 0 ? exactMatches : prices;
+        lowestPriceObj = candidates.reduce((prev, curr) => (prev.current_price < curr.current_price ? prev : curr));
     }
     prices.forEach(p => p.is_lowest = (p.website_name === lowestPriceObj.website_name));
 
-    // Sort: lowest price first so user sees the best deal immediately
+    // Sort: lowest price first, prioritizing exact matches
     prices.sort((a, b) => {
+        if (isPlatformExclusive) {
+            if (a.is_source) return -1;
+            if (b.is_source) return 1;
+        }
         if (a.is_lowest) return -1;
         if (b.is_lowest) return 1;
-        if (a.is_source) return -1;
-        if (b.is_source) return 1;
+        if (a.is_exact_match && !b.is_exact_match) return -1;
+        if (!a.is_exact_match && b.is_exact_match) return 1;
         return a.current_price - b.current_price;
     });
 

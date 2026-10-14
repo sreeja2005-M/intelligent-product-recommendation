@@ -432,7 +432,11 @@ function getStoreSearchUrl(storeName, cleanTerm) {
     } else if (store.includes('vijay')) {
         return `https://www.vijaysales.com/search?q=${encoded}`;
     } else if (store.includes('myntra')) {
-        return `https://www.myntra.com/search?q=${encoded}`;
+        const slug = cleanTerm.toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, '')
+            .trim()
+            .replace(/\s+/g, '-');
+        return `https://www.myntra.com/${slug}`;
     } else if (store.includes('ajio')) {
         return `https://www.ajio.com/search/?text=${encoded}`;
     } else if (store.includes('tata')) {
@@ -1017,7 +1021,7 @@ const VERIFIED_BENCHMARKS = [
             {
                 name: "Myntra",
                 price: 899,
-                url: "https://www.myntra.com/search?q=Safari%20Ashper%20Laptop%20Backpack",
+                url: "https://www.myntra.com/safari-ashper-laptop-backpack",
                 avail: "In Stock",
                 action: "Search on Myntra ↗"
             }
@@ -1322,9 +1326,9 @@ exports.handler = async function (event, context) {
                 { name: "Amazon", url: amazonUrl, mult: 1.0, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) },
                 { name: "Flipkart", url: flipkartUrl, mult: 1.0, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) },
                 { name: "Nykaa", url: (sourceStoreName === "Nykaa") ? targetUrl : getStoreSearchUrl('Nykaa', cleanTerm), mult: 1.0, isDirectResolved: Boolean(sourceStoreName === "Nykaa") },
-                { name: "Purplle", url: (sourceStoreName === "Purplle") ? targetUrl : getStoreSearchUrl('Purplle', cleanTerm), mult: 0.98, isDirectResolved: Boolean(sourceStoreName === "Purplle") },
+                { name: "Purplle", url: (sourceStoreName === "Purplle") ? targetUrl : getStoreSearchUrl('Purplle', cleanTerm), mult: 1.0, isDirectResolved: Boolean(sourceStoreName === "Purplle") },
                 { name: "Myntra", url: isSourceMyntra ? targetUrl : getStoreSearchUrl('Myntra', cleanTerm), mult: 1.02, isDirectResolved: Boolean(isSourceMyntra) },
-                { name: "Meesho", url: isSourceMeesho ? targetUrl : getStoreSearchUrl('Meesho', cleanTerm), mult: 0.95, isDirectResolved: Boolean(isSourceMeesho) }
+                { name: "Meesho", url: isSourceMeesho ? targetUrl : getStoreSearchUrl('Meesho', cleanTerm), mult: 1.0, isDirectResolved: Boolean(isSourceMeesho) }
             ];
         } else if (category === "Fashion") {
             const amazonUrl = isSourceAmazon 
@@ -1337,11 +1341,11 @@ exports.handler = async function (event, context) {
 
             stores = [
                 { name: "Flipkart", url: flipkartUrl, mult: 1.0, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) },
-                { name: "Meesho", url: isSourceMeesho ? targetUrl : getStoreSearchUrl('Meesho', cleanTerm), mult: 0.95, isDirectResolved: Boolean(isSourceMeesho) },
-                { name: "Amazon", url: amazonUrl, mult: 1.05, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) },
-                { name: "Myntra", url: isSourceMyntra ? targetUrl : getStoreSearchUrl('Myntra', cleanTerm), mult: 1.10, isDirectResolved: Boolean(isSourceMyntra) },
-                { name: "Ajio", url: isSourceAjio ? targetUrl : getStoreSearchUrl('Ajio', cleanTerm), mult: 1.08, isDirectResolved: Boolean(isSourceAjio) },
-                { name: "Tata CLiQ", url: getStoreSearchUrl('Tata CLiQ', cleanTerm), mult: 1.12, isDirectResolved: false }
+                { name: "Meesho", url: isSourceMeesho ? targetUrl : getStoreSearchUrl('Meesho', cleanTerm), mult: 1.0, isDirectResolved: Boolean(isSourceMeesho) },
+                { name: "Amazon", url: amazonUrl, mult: 1.0, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) },
+                { name: "Myntra", url: isSourceMyntra ? targetUrl : getStoreSearchUrl('Myntra', cleanTerm), mult: 1.02, isDirectResolved: Boolean(isSourceMyntra) },
+                { name: "Ajio", url: isSourceAjio ? targetUrl : getStoreSearchUrl('Ajio', cleanTerm), mult: 1.02, isDirectResolved: Boolean(isSourceAjio) },
+                { name: "Tata CLiQ", url: getStoreSearchUrl('Tata CLiQ', cleanTerm), mult: 1.04, isDirectResolved: false }
             ];
         } else {
             const amazonUrl = isSourceAmazon 
@@ -1353,10 +1357,10 @@ exports.handler = async function (event, context) {
                 : (flipkartDirectProduct ? flipkartDirectProduct.url : getStoreSearchUrl('Flipkart', cleanTerm));
 
             stores = [
-                { name: "Flipkart", url: flipkartUrl, mult: 0.98, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) },
+                { name: "Flipkart", url: flipkartUrl, mult: 1.0, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) },
                 { name: "Amazon", url: amazonUrl, mult: 1.0, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) },
-                { name: "Meesho", url: isSourceMeesho ? targetUrl : getStoreSearchUrl('Meesho', cleanTerm), mult: 0.95, isDirectResolved: Boolean(isSourceMeesho) },
-                { name: "Myntra", url: isSourceMyntra ? targetUrl : getStoreSearchUrl('Myntra', cleanTerm), mult: 1.04, isDirectResolved: Boolean(isSourceMyntra) },
+                { name: "Meesho", url: isSourceMeesho ? targetUrl : getStoreSearchUrl('Meesho', cleanTerm), mult: 1.0, isDirectResolved: Boolean(isSourceMeesho) },
+                { name: "Myntra", url: isSourceMyntra ? targetUrl : getStoreSearchUrl('Myntra', cleanTerm), mult: 1.02, isDirectResolved: Boolean(isSourceMyntra) },
                 { name: "Ajio", url: isSourceAjio ? targetUrl : getStoreSearchUrl('Ajio', cleanTerm), mult: 1.02, isDirectResolved: Boolean(isSourceAjio) }
             ];
         }
@@ -1431,11 +1435,14 @@ exports.handler = async function (event, context) {
     if (isPlatformExclusive) {
         lowestStore = priceList.find(p => p.is_source) || priceList[0];
     } else {
-        lowestStore = priceList.reduce((min, p) => p.current_price < min.current_price ? p : min, priceList[0]);
+        // Prioritize verified exact matches when available so unverified search links cannot steal Best Deal
+        const exactMatches = priceList.filter(p => p.is_exact_match || p.is_source);
+        const candidates = exactMatches.length > 0 ? exactMatches : priceList;
+        lowestStore = candidates.reduce((min, p) => p.current_price < min.current_price ? p : min, candidates[0]);
     }
     priceList.forEach(p => p.is_lowest = (p.website_name === lowestStore.website_name));
 
-    // Sort: lowest price store first!
+    // Sort: lowest price store first, prioritizing exact matches
     priceList.sort((a, b) => {
         if (isPlatformExclusive) {
             if (a.is_source) return -1;
@@ -1443,6 +1450,8 @@ exports.handler = async function (event, context) {
         }
         if (a.is_lowest) return -1;
         if (b.is_lowest) return 1;
+        if (a.is_exact_match && !b.is_exact_match) return -1;
+        if (!a.is_exact_match && b.is_exact_match) return 1;
         return a.current_price - b.current_price;
     });
 

@@ -322,7 +322,8 @@ def get_store_search_url(store_name: str, clean_term: str) -> str:
     elif "vijay" in store:
         return f"https://www.vijaysales.com/search?q={encoded}"
     elif "myntra" in store:
-        return f"https://www.myntra.com/search?q={encoded}"
+        slug = re.sub(r'[^a-zA-Z0-9\s-]', '', clean_term).strip().replace(' ', '-')
+        return f"https://www.myntra.com/{slug.lower()}"
     elif "ajio" in store:
         return f"https://www.ajio.com/search/?text={encoded}"
     elif "tata" in store:
@@ -702,7 +703,7 @@ VERIFIED_BENCHMARKS = [
             {
                 "name": "Myntra",
                 "price": 899.0,
-                "url": "https://www.myntra.com/search?q=Safari%20Ashper%20Laptop%20Backpack",
+                "url": "https://www.myntra.com/safari-ashper-laptop-backpack",
                 "avail": "In Stock",
                 "action": "Search on Myntra ↗"
             }
@@ -843,11 +844,11 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         flipkart_url = query if "flipkart." in domain else (direct_flipkart_url or get_store_search_url("Flipkart", clean_term))
         stores = [
             {"name": "Flipkart", "url": flipkart_url, "mult": 1.0, "avail": "In Stock"},
-            {"name": "Meesho", "url": query if "meesho." in domain else get_store_search_url("Meesho", clean_term), "mult": 0.95, "avail": "In Stock"},
-            {"name": "Amazon", "url": amazon_url, "mult": 1.05, "avail": "In Stock"},
-            {"name": "Myntra", "url": query if "myntra." in domain else get_store_search_url("Myntra", clean_term), "mult": 1.10, "avail": "In Stock"},
-            {"name": "Ajio", "url": query if "ajio." in domain else get_store_search_url("Ajio", clean_term), "mult": 1.08, "avail": "In Stock"},
-            {"name": "Tata CLiQ", "url": query if "tatacliq." in domain else get_store_search_url("Tata CLiQ", clean_term), "mult": 1.12, "avail": "In Stock"}
+            {"name": "Meesho", "url": query if "meesho." in domain else get_store_search_url("Meesho", clean_term), "mult": 1.0, "avail": "In Stock"},
+            {"name": "Amazon", "url": amazon_url, "mult": 1.0, "avail": "In Stock"},
+            {"name": "Myntra", "url": query if "myntra." in domain else get_store_search_url("Myntra", clean_term), "mult": 1.02, "avail": "In Stock"},
+            {"name": "Ajio", "url": query if "ajio." in domain else get_store_search_url("Ajio", clean_term), "mult": 1.02, "avail": "In Stock"},
+            {"name": "Tata CLiQ", "url": query if "tatacliq." in domain else get_store_search_url("Tata CLiQ", clean_term), "mult": 1.04, "avail": "In Stock"}
         ]
     elif category == "Beauty & Personal Care":
         amazon_url = query if "amazon." in domain else (direct_amazon_url or get_store_search_url("Amazon", clean_term))
@@ -856,9 +857,9 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
             {"name": "Amazon", "url": amazon_url, "mult": 1.0, "avail": "In Stock"},
             {"name": "Flipkart", "url": flipkart_url, "mult": 1.0, "avail": "In Stock"},
             {"name": "Nykaa", "url": query if "nykaa." in domain else get_store_search_url("Nykaa", clean_term), "mult": 1.0, "avail": "In Stock"},
-            {"name": "Purplle", "url": query if "purplle." in domain else get_store_search_url("Purplle", clean_term), "mult": 0.98, "avail": "In Stock"},
+            {"name": "Purplle", "url": query if "purplle." in domain else get_store_search_url("Purplle", clean_term), "mult": 1.0, "avail": "In Stock"},
             {"name": "Myntra", "url": query if "myntra." in domain else get_store_search_url("Myntra", clean_term), "mult": 1.02, "avail": "In Stock"},
-            {"name": "Meesho", "url": query if "meesho." in domain else get_store_search_url("Meesho", clean_term), "mult": 0.95, "avail": "In Stock"}
+            {"name": "Meesho", "url": query if "meesho." in domain else get_store_search_url("Meesho", clean_term), "mult": 1.0, "avail": "In Stock"}
         ]
     elif category == "Electronics":
         amazon_url = query if "amazon." in domain else (direct_amazon_url or get_store_search_url("Amazon", clean_term))
@@ -874,10 +875,10 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         amazon_url = query if "amazon." in domain else (direct_amazon_url or get_store_search_url("Amazon", clean_term))
         flipkart_url = query if "flipkart." in domain else (direct_flipkart_url or get_store_search_url("Flipkart", clean_term))
         stores = [
-            {"name": "Flipkart", "url": flipkart_url, "mult": 0.98, "avail": "In Stock"},
+            {"name": "Flipkart", "url": flipkart_url, "mult": 1.0, "avail": "In Stock"},
             {"name": "Amazon", "url": amazon_url, "mult": 1.0, "avail": "In Stock"},
-            {"name": "Meesho", "url": query if "meesho." in domain else get_store_search_url("Meesho", clean_term), "mult": 0.95, "avail": "In Stock"},
-            {"name": "Myntra", "url": query if "myntra." in domain else get_store_search_url("Myntra", clean_term), "mult": 1.04, "avail": "In Stock"},
+            {"name": "Meesho", "url": query if "meesho." in domain else get_store_search_url("Meesho", clean_term), "mult": 1.0, "avail": "In Stock"},
+            {"name": "Myntra", "url": query if "myntra." in domain else get_store_search_url("Myntra", clean_term), "mult": 1.02, "avail": "In Stock"},
             {"name": "Ajio", "url": query if "ajio." in domain else get_store_search_url("Ajio", clean_term), "mult": 1.02, "avail": "In Stock"}
         ]
 
@@ -1093,7 +1094,10 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
     if is_platform_exclusive:
         lowest_price_store = next((p for p in price_entries if scraped_site in p.website_name.lower()), min(price_entries, key=lambda p: float(p.current_price)))
     else:
-        lowest_price_store = min(price_entries, key=lambda p: float(p.current_price))
+        # Prioritize verified exact matches when available so unverified search links cannot steal Best Deal
+        exact_stores = [p for p in price_entries if (scraped_site and scraped_site in p.website_name.lower()) or is_direct_product_url(p.product_url)]
+        candidates = exact_stores if exact_stores else price_entries
+        lowest_price_store = min(candidates, key=lambda p: float(p.current_price))
     lowest_current_price = float(lowest_price_store.current_price)
 
     # Save snapshot to PriceHistory
