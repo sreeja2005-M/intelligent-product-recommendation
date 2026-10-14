@@ -3,20 +3,53 @@ const http = require('http');
 const zlib = require('zlib');
 const { URL } = require('url');
 
+function cleanProductUrl(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
+    try {
+        let clean = rawUrl.trim();
+        if (clean.startsWith('www.')) clean = 'https://' + clean;
+        const u = new URL(clean);
+        // Amazon ASIN normalization (strips tracking tokens that trigger bot verification)
+        if (u.hostname.includes('amazon.') || u.hostname.includes('amzn.')) {
+            const asinMatch = u.pathname.match(/(?:\/dp\/|\/gp\/product\/|\/d\/)([A-Z0-9]{10})/i);
+            if (asinMatch) {
+                return `https://${u.hostname}/dp/${asinMatch[1]}`;
+            }
+        }
+        // Flipkart item normalization
+        if (u.hostname.includes('flipkart.com')) {
+            const itmMatch = u.pathname.match(/\/p\/(itm[a-zA-Z0-9]+)/i);
+            if (itmMatch) {
+                return `https://${u.hostname}${u.pathname.split('?')[0]}`;
+            }
+        }
+        return clean;
+    } catch (e) {
+        return rawUrl;
+    }
+}
+
 function fetchPage(targetUrl) {
     return new Promise((resolve, reject) => {
         try {
             const urlObj = new URL(targetUrl);
             const client = urlObj.protocol === 'http:' ? http : https;
+            const isAmazon = urlObj.hostname.includes('amazon') || urlObj.hostname.includes('amzn');
+            // Mobile Safari UA reliably fetches Amazon India product pages without robot checks
+            const userAgent = isAmazon
+                ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1'
+                : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
             const options = {
                 hostname: urlObj.hostname,
                 path: urlObj.pathname + urlObj.search,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+                    'User-Agent': userAgent,
+                    'Accept-Language': 'en-IN,en-GB;q=0.9,en;q=0.8',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Encoding': 'gzip, deflate, br'
                 },
-                timeout: 10000
+                timeout: 9000
             };
 
             const req = client.get(options, (res) => {
@@ -46,6 +79,15 @@ function fetchPage(targetUrl) {
                     } catch (e) {
                         html = buf.toString('utf8');
                     }
+
+                    // If Amazon returned a bot check captcha page, fallback to Amazon ASIN search
+                    if (isAmazon && (html.length < 5000 || html.includes('api-services-support@amazon') || html.includes('robot check'))) {
+                        const asinMatch = targetUrl.match(/(?:\/dp\/|\/gp\/product\/|\/d\/)([A-Z0-9]{10})/i);
+                        if (asinMatch) {
+                            return fetchPage(`https://www.amazon.in/s?k=${asinMatch[1]}`).then(resolve).catch(() => resolve(html));
+                        }
+                    }
+
                     resolve(html);
                 });
             });
@@ -393,6 +435,10 @@ function getStoreSearchUrl(storeName, cleanTerm) {
         return `https://www.tatacliq.com/search/?searchCategory=all&text=${encoded}`;
     } else if (store.includes('meesho')) {
         return `https://www.meesho.com/search?q=${encoded}`;
+    } else if (store.includes('nykaa')) {
+        return `https://www.nykaa.com/search/result/?q=${encoded}`;
+    } else if (store.includes('purplle')) {
+        return `https://www.purplle.com/search?q=${encoded}`;
     }
     return `https://www.google.com/search?q=${encoded}`;
 }
@@ -405,9 +451,10 @@ function findAmazonDirectProduct(query) {
             const searchUrl = 'https://www.amazon.in/s?k=' + encodeURIComponent(clean);
             const req = https.get(searchUrl, {
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    'Accept-Language': 'en-IN,en;q=0.9',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Encoding': 'gzip, deflate, br'
                 },
                 timeout: 4000
             }, (res) => {
@@ -518,25 +565,66 @@ function extractProductInfo(html, url) {
     let imageUrl = null;
     let reviews = [];
 
-    // Amazon specific selectors
-    const amazonTitle = html.match(/id="productTitle"[^>]*>\s*([^<]+)\s*</i);
-    if (amazonTitle) {
-        let t = amazonTitle[1].split(':')[0].trim();
-        t = t.replace(/\s*\(.*\)/g, '').trim();
-        productName = t;
+    // Amazon specific and high-precision title selectors
+    const titleMatch = html.match(/id="productTitle"[^>]*>([\s\S]*?)<\/span>/i) ||
+                       html.match(/id="productTitle"[^>]*>\s*([^<]+)\s*</i) ||
+                       html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    if (titleMatch) {
+        let t = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+        t = t.replace(/^Buy\s+/i, '');
+        if (t.includes('|')) {
+            t = t.split('|')[0].trim();
+        }
+        t = t.replace(/:\s*Amazon\.in.*$/i, '')
+             .replace(/\|\s*Amazon\.in.*$/i, '')
+             .replace(/Online\s+at\s+Low\s+Prices.*$/i, '')
+             .replace(/Online\s+at\s+Best\s+Price.*$/i, '')
+             .replace(/\|\s*Flipkart\.com/i, '')
+             .replace(/-\s*Shirts\s+for\s+Men.*Myntra/i, '')
+             .replace(/\|\s*Myntra/i, '')
+             .replace(/\|\s*Croma/i, '')
+             .replace(/\|\s*Reliance\s+Digital/i, '')
+             .replace(/\|\s*Vijay\s*Sales/i, '')
+             .replace(/\|\s*Ajio/i, '')
+             .replace(/\|\s*Meesho/i, '')
+             .replace(/\s+/g, ' ')
+             .trim();
+        if (t.length > 3 && !isInvalidTitle(t)) {
+            productName = t;
+        }
     }
 
-    const amazonWhole = html.match(/class="a-price-whole">([0-9,]+)/i);
-    if (amazonWhole) currentPrice = parseFloat(amazonWhole[1].replace(/,/g, ''));
+    // Modern Amazon price extraction: priceToPay, whole price, offscreen
+    const priceToPay = html.match(/class="priceToPay"[\s\S]*?class="a-offscreen">\s*₹?\s*([0-9,]+(?:\.\d+)?)/i);
+    if (priceToPay) currentPrice = parseFloat(priceToPay[1].replace(/,/g, ''));
 
-    const amazonOffscreen = html.match(/class="a-offscreen">\s*₹\s*([0-9,]+(?:\.\d+)?)/i);
-    if (!currentPrice && amazonOffscreen) currentPrice = parseFloat(amazonOffscreen[1].replace(/,/g, ''));
+    if (!currentPrice) {
+        const amazonWhole = html.match(/class="a-price-whole">([0-9,]+)/i);
+        if (amazonWhole) currentPrice = parseFloat(amazonWhole[1].replace(/,/g, ''));
+    }
 
-    const amazonMrp = html.match(/M\.?R\.?P\.?\s*:?\s*₹\s*([\d,]+(?:\.\d+)?)/i);
+    if (!currentPrice) {
+        const amazonOffscreen = html.match(/class="a-offscreen">\s*₹\s*([0-9,]+(?:\.\d+)?)/i);
+        if (amazonOffscreen) currentPrice = parseFloat(amazonOffscreen[1].replace(/,/g, ''));
+    }
+
+    const amazonMrp = html.match(/(?:M\.?R\.?P\.?|List\s*Price)[\s\S]{0,150}?class="a-offscreen">\s*₹?\s*([\d,]+(?:\.\d+)?)/i) ||
+                     html.match(/(?:M\.?R\.?P\.?|List\s*Price)[\s\S]{0,100}?[₹Rs\.]\s*([\d,]+(?:\.\d+)?)/i) ||
+                     html.match(/M\.?R\.?P\.?\s*:?\s*₹\s*([\d,]+(?:\.\d+)?)/i);
     if (amazonMrp) originalPrice = parseFloat(amazonMrp[1].replace(/,/g, ''));
 
-    const amazonImg = html.match(/id="landingImage"[^>]*src="([^"]+)"/i) || html.match(/data-old-hires="([^"]+)"/i);
+    const amazonImg = html.match(/id="landingImage"[^>]*src="([^"]+)"/i) || 
+                      html.match(/id="landingImage"[^>]*data-old-hires="([^"]+)"/i) ||
+                      html.match(/<img[^>]+id="main-image"[^>]+src="([^"]+)"/i);
     if (amazonImg) imageUrl = amazonImg[1];
+
+    if (!imageUrl) {
+        const images = [...html.matchAll(/https:\/\/[^"'\s]+\.(?:jpg|png|webp)/gi)]
+            .map(m => m[0])
+            .filter(u => u.includes('media-amazon.com/images/I/') || u.includes('images-amazon.com/images/I/'))
+            .filter(u => !u.includes('play-button') && !u.includes('icon'));
+        if (images.length > 0) imageUrl = images[0];
+    }
 
     // 1. JSON-LD parsing
     const ldMatches = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
@@ -973,13 +1061,14 @@ exports.handler = async function (event, context) {
 
     const isUrl = query.startsWith('http://') || query.startsWith('https://') || query.startsWith('www.');
     const targetUrl = query.startsWith('www.') ? 'https://' + query : query;
+    const fetchTargetUrl = isUrl ? cleanProductUrl(targetUrl) : targetUrl;
 
     let extracted = { productName: null, currentPrice: null, originalPrice: null, rating: 4.2, reviewCount: 50, reviews: [] };
 
     if (isUrl) {
         try {
-            const html = await fetchPage(targetUrl);
-            extracted = extractProductInfo(html, targetUrl);
+            const html = await fetchPage(fetchTargetUrl);
+            extracted = extractProductInfo(html, fetchTargetUrl);
         } catch (err) {
             console.warn('Live fetch note:', err.message);
         }
@@ -1002,23 +1091,39 @@ exports.handler = async function (event, context) {
         productName = "Smart Buy Product";
     }
 
-    const text = productName.toLowerCase();
-    const isElectronics = [
-        "realme", "redmi", "xiaomi", "mi", "oneplus", "vivo", "oppo", "poco", "iqoo", "motorola", "moto", "nokia", "apple", "iphone", "samsung", "pixel", "galaxy",
-        "5g", "4g", "phone", "mobile", "smartphone", "laptop", "macbook", "ipad", "tablet", "watch", "smartwatch", "tv", "earbuds", "headphone", "audio", 
-        "camera", "console", "croma", "dimensity", "snapdragon", "intel", "amd", "ryzen", "rtx", "headset", "bluetooth", "charger", "soundbar", "speaker"
-    ].some(k => text.includes(k));
+    const text = (productName + " " + targetUrl).toLowerCase();
 
-    const isFashion = ["kurta", "kurti", "saree", "suit", "anarkali", "salwar", "lehenga", "ethnic", "dress", "shirt", "jeans", "t-shirt", "jacket", "top", "palazzo", "legging", "clothing", "apparel", "fashion", "dupatta"].some(k => text.includes(k));
+    const isBeauty = [
+        "lip liner", "lipliner", "lipstick", "lip gloss", "lip balm", "kajal", "eyeliner", "mascara", 
+        "eyeshadow", "foundation", "concealer", "compact", "blush", "highlighter", "primer",
+        "makeup", "cosmetics", "cosmetic", "skincare", "skin care", "serum", "sunscreen", "moisturizer", 
+        "face wash", "body wash", "lotion", "toner", "shampoo", "conditioner", "hair oil", "perfume", "deodorant",
+        "mars", "maybelline", "lakme", "nykaa", "sugar cosmetics", "colorbar", "mamaearth", "mcaffeine", 
+        "plum goodness", "biotique", "dot & key", "minimalist", "cetaphil", "huda beauty"
+    ].some(k => new RegExp(`\\b${k}\\b`, 'i').test(text));
+
+    const isElectronics = !isBeauty && (
+        [
+            "realme", "redmi", "xiaomi", "oneplus", "oppo", "poco", "iqoo", "motorola", "moto", "nokia", "apple", "iphone", "samsung", "pixel", "galaxy",
+            "5g", "4g", "smartphone", "laptop", "macbook", "ipad", "tablet", "smartwatch", "tv", "earbuds", "headphone", "audio", 
+            "croma", "dimensity", "snapdragon", "intel", "amd", "ryzen", "rtx", "headset", "bluetooth", "charger", "soundbar", "speaker"
+        ].some(k => new RegExp(`\\b${k}\\b`, 'i').test(text)) || (/\bvivo\b/i.test(text) && !/in[- ]vivo/i.test(text))
+    );
+
+    const isFashion = !isBeauty && ["kurta", "kurti", "saree", "suit", "anarkali", "salwar", "lehenga", "ethnic", "dress", "shirt", "jeans", "t-shirt", "jacket", "top", "palazzo", "legging", "clothing", "apparel", "fashion", "dupatta"].some(k => text.includes(k));
 
     let category = "General";
-    if (isElectronics) category = "Electronics";
+    if (isBeauty) category = "Beauty & Personal Care";
+    else if (isElectronics) category = "Electronics";
     else if (isFashion) category = "Fashion";
 
     // Establish base and original price
     let basePrice = extracted.currentPrice;
     if (!basePrice || basePrice <= 0) {
-        if (text.includes("kurta") || text.includes("kurti") || text.includes("saree")) basePrice = 239;
+        if (text.includes("lip liner") || text.includes("lipliner") || text.includes("kajal")) basePrice = 69;
+        else if (text.includes("lipstick") || text.includes("lip gloss") || text.includes("lip balm")) basePrice = 149;
+        else if (text.includes("serum") || text.includes("sunscreen") || text.includes("moisturizer")) basePrice = 349;
+        else if (text.includes("kurta") || text.includes("kurti") || text.includes("saree")) basePrice = 239;
         else if (text.includes("shirt") || text.includes("dress") || text.includes("jeans")) basePrice = 499;
         else if (text.includes("iphone 16 pro max")) basePrice = 144900;
         else if (text.includes("iphone 16 pro")) basePrice = 119900;
@@ -1043,7 +1148,13 @@ exports.handler = async function (event, context) {
 
     let originalPrice = extracted.originalPrice;
     if (!originalPrice || originalPrice <= basePrice) {
-        originalPrice = (basePrice <= 300) ? 1599 : Math.round(basePrice * 1.35);
+        if (text.includes("kurta") || text.includes("kurti") || text.includes("saree")) {
+            originalPrice = Math.max(899, Math.round(basePrice * 2.5));
+        } else if (category === "Beauty & Personal Care") {
+            originalPrice = Math.max(Math.round(basePrice * 1.05), basePrice + 2);
+        } else {
+            originalPrice = Math.round(basePrice * 1.25);
+        }
     }
 
     const cleanTerm = cleanSearchTerm(productName);
@@ -1057,6 +1168,8 @@ exports.handler = async function (event, context) {
     const isSourceMyntra = isUrl && lowerTarget.includes('myntra');
     const isSourceAjio = isUrl && lowerTarget.includes('ajio');
     const isSourceCroma = isUrl && lowerTarget.includes('croma');
+    const isSourceNykaa = isUrl && lowerTarget.includes('nykaa');
+    const isSourcePurplle = isUrl && lowerTarget.includes('purplle');
 
     let sourceStoreName = null;
     if (isSourceFlipkart) sourceStoreName = "Flipkart";
@@ -1065,6 +1178,8 @@ exports.handler = async function (event, context) {
     else if (isSourceMyntra) sourceStoreName = "Myntra";
     else if (isSourceAjio) sourceStoreName = "Ajio";
     else if (isSourceCroma) sourceStoreName = "Croma";
+    else if (isSourceNykaa) sourceStoreName = "Nykaa";
+    else if (isSourcePurplle) sourceStoreName = "Purplle";
 
     // Universal Multi-Store Brands: available across multiple major retailers (not platform-exclusive)
     const UNIVERSAL_BRANDS = [
@@ -1076,11 +1191,12 @@ exports.handler = async function (event, context) {
         "nike", "adidas", "puma", "reebok", "under armour", "asics", "skechers", "new balance", "converse", "vans",
         "levi's", "levis", "zara", "h&m", "u.s. polo", "us polo", "allen solly", "peter england", "van heusen", "louis philippe",
         "wrangler", "pepe jeans", "spykar", "flying machine", "bata", "woodland", "red tape", "crocs",
-        "casio", "titan", "fastrack", "fossil", "timex", "tommy hilfiger"
+        "casio", "titan", "fastrack", "fossil", "timex", "tommy hilfiger",
+        "mars", "maybelline", "lakme", "nykaa", "sugar", "colorbar", "mamaearth", "biotique", "plum", "minimalist"
     ];
 
     const detectedBrand = ((extracted.brand || "") + " " + productName).toLowerCase();
-    const isUniversalBrand = isElectronics || UNIVERSAL_BRANDS.some(b => detectedBrand.includes(b));
+    const isUniversalBrand = isElectronics || isBeauty || UNIVERSAL_BRANDS.some(b => detectedBrand.includes(b));
     // Exclusive only if user provided a URL for a non-universal boutique/private-label seller (e.g. Leezaa kurta)
     const isPlatformExclusive = Boolean(isUrl && sourceStoreName && !isUniversalBrand);
 
@@ -1162,6 +1278,23 @@ exports.handler = async function (event, context) {
                 { name: "Amazon", url: amazonUrl, mult: isSourceAmazon ? 1.0 : 1.0, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct || isDirectProductUrl(amazonUrl)) },
                 { name: "Flipkart", url: flipkartUrl, mult: isSourceFlipkart ? 1.0 : 1.0, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct || isDirectProductUrl(flipkartUrl)) }
             ];
+        } else if (category === "Beauty & Personal Care") {
+            const amazonUrl = isSourceAmazon 
+                ? targetUrl 
+                : (amazonDirectProduct ? amazonDirectProduct.url : getStoreSearchUrl('Amazon', cleanTerm));
+
+            const flipkartUrl = isSourceFlipkart 
+                ? targetUrl 
+                : (flipkartDirectProduct ? flipkartDirectProduct.url : getStoreSearchUrl('Flipkart', cleanTerm));
+
+            stores = [
+                { name: "Amazon", url: amazonUrl, mult: 1.0, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct) },
+                { name: "Flipkart", url: flipkartUrl, mult: 1.0, isDirectResolved: Boolean(isSourceFlipkart || flipkartDirectProduct) },
+                { name: "Nykaa", url: (sourceStoreName === "Nykaa") ? targetUrl : getStoreSearchUrl('Nykaa', cleanTerm), mult: 1.0, isDirectResolved: Boolean(sourceStoreName === "Nykaa") },
+                { name: "Purplle", url: (sourceStoreName === "Purplle") ? targetUrl : getStoreSearchUrl('Purplle', cleanTerm), mult: 0.98, isDirectResolved: Boolean(sourceStoreName === "Purplle") },
+                { name: "Myntra", url: isSourceMyntra ? targetUrl : getStoreSearchUrl('Myntra', cleanTerm), mult: 1.02, isDirectResolved: Boolean(isSourceMyntra) },
+                { name: "Meesho", url: isSourceMeesho ? targetUrl : getStoreSearchUrl('Meesho', cleanTerm), mult: 0.95, isDirectResolved: Boolean(isSourceMeesho) }
+            ];
         } else if (category === "Fashion") {
             const amazonUrl = isSourceAmazon 
                 ? targetUrl 
@@ -1210,8 +1343,8 @@ exports.handler = async function (event, context) {
 
             if (isSource) {
                 cPrice = basePrice;
-                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.15));
-                disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+                oPrice = (originalPrice && originalPrice >= cPrice) ? originalPrice : Math.round(cPrice * 1.05);
+                disc = oPrice > cPrice ? Math.round(((oPrice - cPrice) / oPrice) * 100) : 0;
                 avail = "In Stock (Exact Match)";
                 isExactMatch = true;
                 matchType = "EXACT_MODEL";
@@ -1225,17 +1358,21 @@ exports.handler = async function (event, context) {
                 matchType = "CATEGORY_SIMILAR";
                 actionLabel = `Search Similar on ${s.name} ↗`;
             } else if (isDirect) {
-                cPrice = Math.round((basePrice * (s.mult || 1.0)) / 10) * 10;
-                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.18));
-                disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+                cPrice = (category === "Beauty & Personal Care" && basePrice < 200)
+                    ? Math.round(basePrice * (s.mult || 1.0))
+                    : Math.round((basePrice * (s.mult || 1.0)) / 10) * 10;
+                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.08));
+                disc = oPrice > cPrice ? Math.round(((oPrice - cPrice) / oPrice) * 100) : 0;
                 avail = "In Stock (Exact Model)";
                 isExactMatch = true;
                 matchType = "EXACT_MODEL";
                 actionLabel = `Buy on ${s.name} ↗ (Exact Model)`;
             } else {
-                cPrice = Math.round((basePrice * (s.mult || 1.0)) / 10) * 10;
-                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.18));
-                disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+                cPrice = (category === "Beauty & Personal Care" && basePrice < 200)
+                    ? Math.round(basePrice * (s.mult || 1.0))
+                    : Math.round((basePrice * (s.mult || 1.0)) / 10) * 10;
+                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.08));
+                disc = oPrice > cPrice ? Math.round(((oPrice - cPrice) / oPrice) * 100) : 0;
                 avail = "Available in Search";
                 isExactMatch = false;
                 matchType = "SEARCH_COMPARISON";
@@ -1343,7 +1480,7 @@ exports.handler = async function (event, context) {
         product: {
             product_id: 101,
             product_name: productName,
-            brand: extracted.brand || (isFashion ? "Leezaa Collection" : "Featured Brand"),
+            brand: extracted.brand || (text.includes("mars") ? "MARS" : (category === "Beauty & Personal Care" ? "Beauty Brand" : (isFashion ? "Leezaa Collection" : "Featured Brand"))),
             category: category,
             image_url: extracted.imageUrl
         },

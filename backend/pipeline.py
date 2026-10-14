@@ -8,20 +8,31 @@ from sqlalchemy.orm import Session
 
 def detect_product_category(product_name: str, query: str) -> str:
     text = (product_name + " " + query).lower()
+    beauty_keywords = [
+        "lip liner", "lipliner", "lipstick", "lip gloss", "lip balm", "kajal", "eyeliner", "mascara", 
+        "eyeshadow", "foundation", "concealer", "compact", "blush", "highlighter", "primer",
+        "makeup", "cosmetics", "cosmetic", "skincare", "skin care", "serum", "sunscreen", "moisturizer", 
+        "face wash", "body wash", "lotion", "toner", "shampoo", "conditioner", "hair oil", "perfume", "deodorant",
+        "mars", "maybelline", "lakme", "nykaa", "sugar cosmetics", "colorbar", "mamaearth", "mcaffeine", 
+        "plum goodness", "biotique", "dot & key", "minimalist", "cetaphil", "huda beauty"
+    ]
+    if any(re.search(rf"\b{re.escape(k)}\b", text) for k in beauty_keywords):
+        return "Beauty & Personal Care"
+
     if any(k in text for k in ["kurta", "kurti", "saree", "suit", "anarkali", "salwar", "lehenga", "ethnic", "dress", "shirt", "jeans", "t-shirt", "jacket", "top", "palazzo", "legging", "clothing", "apparel", "fashion", "dupatta"]):
         return "Fashion"
-    elif any(k in text for k in [
-        "realme", "redmi", "xiaomi", "mi", "oneplus", "vivo", "oppo", "poco", "iqoo", "motorola", "moto", "nokia", "apple", "iphone", "samsung", "pixel", "galaxy",
-        "5g", "4g", "phone", "mobile", "smartphone", "laptop", "macbook", "ipad", "tablet", "watch", "smartwatch", "tv", "earbuds", "headphone", "audio", 
-        "camera", "console", "croma", "dimensity", "snapdragon", "intel", "amd", "ryzen", "rtx", "headset", "bluetooth", "charger", "soundbar", "speaker"
-    ]):
+
+    electronics_keywords = [
+        "realme", "redmi", "xiaomi", "oneplus", "oppo", "poco", "iqoo", "motorola", "moto", "nokia", "apple", "iphone", "samsung", "pixel", "galaxy",
+        "5g", "4g", "smartphone", "laptop", "macbook", "ipad", "tablet", "smartwatch", "tv", "earbuds", "headphone", "audio", 
+        "croma", "dimensity", "snapdragon", "intel", "amd", "ryzen", "rtx", "headset", "bluetooth", "charger", "soundbar", "speaker"
+    ]
+    if any(re.search(rf"\b{re.escape(k)}\b", text) for k in electronics_keywords) or (re.search(r"\bvivo\b", text) and not re.search(r"in[- ]vivo", text)):
         return "Electronics"
     elif any(k in text for k in ["shoe", "sneaker", "boot", "sandal", "footwear", "nike", "adidas", "puma", "crocs"]):
         return "Footwear"
     elif any(k in text for k in ["bag", "backpack", "trolley", "luggage", "wallet", "purse", "suitcase"]):
         return "Bags & Luggage"
-    elif any(k in text for k in ["beauty", "lipstick", "perfume", "skincare", "cream", "serum", "makeup"]):
-        return "Beauty & Personal Care"
     return "General"
 
 
@@ -318,6 +329,10 @@ def get_store_search_url(store_name: str, clean_term: str) -> str:
         return f"https://www.tatacliq.com/search/?searchCategory=all&text={encoded}"
     elif "meesho" in store:
         return f"https://www.meesho.com/search?q={encoded}"
+    elif "nykaa" in store:
+        return f"https://www.nykaa.com/search/result/?q={encoded}"
+    elif "purplle" in store:
+        return f"https://www.purplle.com/search?q={encoded}"
     return f"https://www.google.com/search?q={encoded}"
 
 
@@ -325,13 +340,19 @@ def get_store_search_url(store_name: str, clean_term: str) -> str:
 def estimate_realistic_base_price(product_name: str, query: str) -> float:
     text = (product_name + " " + query).lower()
     
-    explicit_match = re.search(r'(?:rs\.?|inr|₹)?\s*(\d{4,6})', text, re.IGNORECASE)
+    explicit_match = re.search(r'(?:rs\.?|inr|₹)?\s*(\d{2,6})', text, re.IGNORECASE)
     if explicit_match:
         val = float(explicit_match.group(1))
-        if 499 <= val <= 250000:
+        if 49 <= val <= 250000:
             return val
 
-    if any(k in text for k in ["iphone 16 pro max", "iphone 15 pro max"]):
+    if any(k in text for k in ["lip liner", "lipliner", "kajal"]):
+        return 69.0
+    elif any(k in text for k in ["lipstick", "lip gloss", "lip balm"]):
+        return 149.0
+    elif any(k in text for k in ["serum", "sunscreen", "moisturizer"]):
+        return 349.0
+    elif any(k in text for k in ["iphone 16 pro max", "iphone 15 pro max"]):
         return 144900.0
     elif any(k in text for k in ["iphone 16 pro", "iphone 15 pro", "s24 ultra", "macbook pro"]):
         return 119900.0
@@ -828,6 +849,17 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
             {"name": "Ajio", "url": query if "ajio." in domain else get_store_search_url("Ajio", clean_term), "mult": 1.08, "avail": "In Stock"},
             {"name": "Tata CLiQ", "url": query if "tatacliq." in domain else get_store_search_url("Tata CLiQ", clean_term), "mult": 1.12, "avail": "In Stock"}
         ]
+    elif category == "Beauty & Personal Care":
+        amazon_url = query if "amazon." in domain else (direct_amazon_url or get_store_search_url("Amazon", clean_term))
+        flipkart_url = query if "flipkart." in domain else (direct_flipkart_url or get_store_search_url("Flipkart", clean_term))
+        stores = [
+            {"name": "Amazon", "url": amazon_url, "mult": 1.0, "avail": "In Stock"},
+            {"name": "Flipkart", "url": flipkart_url, "mult": 1.0, "avail": "In Stock"},
+            {"name": "Nykaa", "url": query if "nykaa." in domain else get_store_search_url("Nykaa", clean_term), "mult": 1.0, "avail": "In Stock"},
+            {"name": "Purplle", "url": query if "purplle." in domain else get_store_search_url("Purplle", clean_term), "mult": 0.98, "avail": "In Stock"},
+            {"name": "Myntra", "url": query if "myntra." in domain else get_store_search_url("Myntra", clean_term), "mult": 1.02, "avail": "In Stock"},
+            {"name": "Meesho", "url": query if "meesho." in domain else get_store_search_url("Meesho", clean_term), "mult": 0.95, "avail": "In Stock"}
+        ]
     elif category == "Electronics":
         amazon_url = query if "amazon." in domain else (direct_amazon_url or get_store_search_url("Amazon", clean_term))
         flipkart_url = query if "flipkart." in domain else (direct_flipkart_url or get_store_search_url("Flipkart", clean_term))
@@ -858,10 +890,11 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         "nike", "adidas", "puma", "reebok", "under armour", "asics", "skechers", "new balance", "converse", "vans",
         "levi's", "levis", "zara", "h&m", "u.s. polo", "us polo", "allen solly", "peter england", "van heusen", "louis philippe",
         "wrangler", "pepe jeans", "spykar", "flying machine", "bata", "woodland", "red tape", "crocs",
-        "casio", "titan", "fastrack", "fossil", "timex", "tommy hilfiger"
+        "casio", "titan", "fastrack", "fossil", "timex", "tommy hilfiger",
+        "mars", "maybelline", "lakme", "nykaa", "sugar", "colorbar", "mamaearth", "biotique", "plum", "minimalist"
     ]
     detected_brand_str = f"{brand} {product_name}".lower()
-    is_universal_brand = (category == "Electronics") or any(b in detected_brand_str for b in UNIVERSAL_BRANDS)
+    is_universal_brand = (category == "Electronics") or (category == "Beauty & Personal Care") or any(b in detected_brand_str for b in UNIVERSAL_BRANDS)
     scraped_site = scraped_data.website.lower() if scraped_data else ""
     is_platform_exclusive = bool(is_url and scraped_site and not is_universal_brand)
 

@@ -795,6 +795,10 @@ function getStoreSearchUrl(storeName, cleanTerm) {
         return `https://www.tatacliq.com/search/?searchCategory=all&text=${encoded}`;
     } else if (store.includes('meesho')) {
         return `https://www.meesho.com/search?q=${encoded}`;
+    } else if (store.includes('nykaa')) {
+        return `https://www.nykaa.com/search/result/?q=${encoded}`;
+    } else if (store.includes('purplle')) {
+        return `https://www.purplle.com/search?q=${encoded}`;
     }
     return `https://www.google.com/search?q=${encoded}`;
 }
@@ -825,32 +829,54 @@ function generateMockPipelineData(query) {
 
     // Detect Category & Estimate Realistic Baseline Indian Retail Price
     const text = (productName + " " + query).toLowerCase();
-    const isElectronics = [
-        "realme", "redmi", "xiaomi", "mi", "oneplus", "vivo", "oppo", "poco", "iqoo", "motorola", "moto", "nokia", "apple", "iphone", "samsung", "pixel", "galaxy",
-        "5g", "4g", "phone", "mobile", "smartphone", "laptop", "macbook", "ipad", "tablet", "watch", "smartwatch", "tv", "earbuds", "headphone", "audio", 
-        "camera", "console", "croma", "dimensity", "snapdragon", "intel", "amd", "ryzen", "rtx", "headset", "bluetooth", "charger", "soundbar", "speaker"
-    ].some(k => text.includes(k));
 
-    const isFashion = ["kurta", "kurti", "saree", "suit", "anarkali", "salwar", "lehenga", "ethnic", "dress", "shirt", "jeans", "t-shirt", "jacket", "top", "palazzo", "legging", "clothing", "apparel", "fashion", "dupatta"].some(k => text.includes(k));
+    const isBeauty = [
+        "lip liner", "lipliner", "lipstick", "lip gloss", "lip balm", "kajal", "eyeliner", "mascara", 
+        "eyeshadow", "foundation", "concealer", "compact", "blush", "highlighter", "primer",
+        "makeup", "cosmetics", "cosmetic", "skincare", "skin care", "serum", "sunscreen", "moisturizer", 
+        "face wash", "body wash", "lotion", "toner", "shampoo", "conditioner", "hair oil", "perfume", "deodorant",
+        "mars", "maybelline", "lakme", "nykaa", "sugar cosmetics", "colorbar", "mamaearth", "mcaffeine", 
+        "plum goodness", "biotique", "dot & key", "minimalist", "cetaphil", "huda beauty"
+    ].some(k => new RegExp(`\\b${k}\\b`, 'i').test(text));
+
+    const isElectronics = !isBeauty && (
+        [
+            "realme", "redmi", "xiaomi", "oneplus", "oppo", "poco", "iqoo", "motorola", "moto", "nokia", "apple", "iphone", "samsung", "pixel", "galaxy",
+            "5g", "4g", "smartphone", "laptop", "macbook", "ipad", "tablet", "smartwatch", "tv", "earbuds", "headphone", "audio", 
+            "croma", "dimensity", "snapdragon", "intel", "amd", "ryzen", "rtx", "headset", "bluetooth", "charger", "soundbar", "speaker"
+        ].some(k => new RegExp(`\\b${k}\\b`, 'i').test(text)) || (/\bvivo\b/i.test(text) && !/in[- ]vivo/i.test(text))
+    );
+
+    const isFashion = !isBeauty && ["kurta", "kurti", "saree", "suit", "anarkali", "salwar", "lehenga", "ethnic", "dress", "shirt", "jeans", "t-shirt", "jacket", "top", "palazzo", "legging", "clothing", "apparel", "fashion", "dupatta"].some(k => text.includes(k));
 
     let category = "General";
-    if (isElectronics) category = "Electronics";
+    if (isBeauty) category = "Beauty & Personal Care";
+    else if (isElectronics) category = "Electronics";
     else if (isFashion) category = "Fashion";
 
     let basePrice = 0;
     let originalPrice = 0;
 
     // Explicit price match ONLY if formatted with currency symbols (e.g., "₹799" or "Rs 699")
-    const explicitMatch = text.match(/(?:rs\.?|inr|₹|price)\s*:?\s*(\d{3,6})/i);
+    const explicitMatch = text.match(/(?:rs\.?|inr|₹|price)\s*:?\s*(\d{2,6})/i);
     if (explicitMatch) {
         const val = parseInt(explicitMatch[1], 10);
-        if (val >= 199 && val <= 250000) {
+        if (val >= 49 && val <= 250000) {
             basePrice = val;
         }
     }
 
     if (!basePrice) {
-        if (text.includes("iphone 16 pro max") || text.includes("iphone 15 pro max")) {
+        if (text.includes("lip liner") || text.includes("lipliner") || text.includes("kajal")) {
+            basePrice = 69;
+            originalPrice = 69;
+        } else if (text.includes("lipstick") || text.includes("lip gloss") || text.includes("lip balm")) {
+            basePrice = 149;
+            originalPrice = 199;
+        } else if (text.includes("serum") || text.includes("sunscreen") || text.includes("moisturizer")) {
+            basePrice = 349;
+            originalPrice = 449;
+        } else if (text.includes("iphone 16 pro max") || text.includes("iphone 15 pro max")) {
             basePrice = 144900;
             originalPrice = 159900;
         } else if (text.includes("iphone 16 pro") || text.includes("iphone 15 pro") || text.includes("s24 ultra") || text.includes("macbook pro")) {
@@ -907,8 +933,14 @@ function generateMockPipelineData(query) {
         }
     }
 
-    if (!originalPrice) {
-        originalPrice = (basePrice <= 300) ? 1599 : Math.round(basePrice * 1.35);
+    if (!originalPrice || originalPrice <= basePrice) {
+        if (text.includes("kurta") || text.includes("kurti") || text.includes("saree")) {
+            originalPrice = Math.max(899, Math.round(basePrice * 2.5));
+        } else if (category === "Beauty & Personal Care") {
+            originalPrice = Math.max(Math.round(basePrice * 1.05), basePrice + 2);
+        } else {
+            originalPrice = Math.round(basePrice * 1.25);
+        }
     }
 
     let sourceStoreName = null;
@@ -922,6 +954,8 @@ function generateMockPipelineData(query) {
         else if (lowerQ.includes('croma.')) sourceStoreName = "Croma";
         else if (lowerQ.includes('reliancedigital.')) sourceStoreName = "Reliance Digital";
         else if (lowerQ.includes('vijaysales.')) sourceStoreName = "Vijay Sales";
+        else if (lowerQ.includes('nykaa.')) sourceStoreName = "Nykaa";
+        else if (lowerQ.includes('purplle.')) sourceStoreName = "Purplle";
     }
 
     const UNIVERSAL_BRANDS = [
@@ -933,10 +967,11 @@ function generateMockPipelineData(query) {
         "nike", "adidas", "puma", "reebok", "under armour", "asics", "skechers", "new balance", "converse", "vans",
         "levi's", "levis", "zara", "h&m", "u.s. polo", "us polo", "allen solly", "peter england", "van heusen", "louis philippe",
         "wrangler", "pepe jeans", "spykar", "flying machine", "bata", "woodland", "red tape", "crocs",
-        "casio", "titan", "fastrack", "fossil", "timex", "tommy hilfiger"
+        "casio", "titan", "fastrack", "fossil", "timex", "tommy hilfiger",
+        "mars", "maybelline", "lakme", "nykaa", "sugar", "colorbar", "mamaearth", "biotique", "plum", "minimalist"
     ];
 
-    const isUniversalBrand = isElectronics || UNIVERSAL_BRANDS.some(b => text.includes(b));
+    const isUniversalBrand = isElectronics || isBeauty || UNIVERSAL_BRANDS.some(b => text.includes(b));
     const isPlatformExclusive = Boolean(isUrl && sourceStoreName && !isUniversalBrand);
 
     const cleanTerm = cleanSearchTerm(productName);
@@ -1104,6 +1139,22 @@ function generateMockPipelineData(query) {
                 { name: "Amazon", mult: 1.0, avail: "In Stock", url: amazonUrl },
                 { name: "Flipkart", mult: 1.0, avail: "In Stock", url: flipkartUrl }
             ];
+        } else if (category === "Beauty & Personal Care") {
+            const amazonUrl = (sourceStoreName === "Amazon") ? query : getStoreSearchUrl('Amazon', cleanTerm);
+            const flipkartUrl = (sourceStoreName === "Flipkart") ? query : getStoreSearchUrl('Flipkart', cleanTerm);
+            const nykaaUrl = (sourceStoreName === "Nykaa") ? query : getStoreSearchUrl('Nykaa', cleanTerm);
+            const purplleUrl = (sourceStoreName === "Purplle") ? query : getStoreSearchUrl('Purplle', cleanTerm);
+            const myntraUrl = (sourceStoreName === "Myntra") ? query : getStoreSearchUrl('Myntra', cleanTerm);
+            const meeshoUrl = (sourceStoreName === "Meesho") ? query : getStoreSearchUrl('Meesho', cleanTerm);
+
+            stores = [
+                { name: "Amazon", mult: 1.0, avail: "In Stock", url: amazonUrl },
+                { name: "Flipkart", mult: 1.0, avail: "In Stock", url: flipkartUrl },
+                { name: "Nykaa", mult: 1.0, avail: "In Stock", url: nykaaUrl },
+                { name: "Purplle", mult: 0.98, avail: "In Stock", url: purplleUrl },
+                { name: "Myntra", mult: 1.02, avail: "In Stock", url: myntraUrl },
+                { name: "Meesho", mult: 0.95, avail: "In Stock", url: meeshoUrl }
+            ];
         } else if (category === "Fashion") {
             const flipkartUrl = (sourceStoreName === "Flipkart") ? query : getStoreSearchUrl('Flipkart', cleanTerm);
             const amazonUrl = (sourceStoreName === "Amazon") ? query : getStoreSearchUrl('Amazon', cleanTerm);
@@ -1137,7 +1188,7 @@ function generateMockPipelineData(query) {
         }
 
         prices = stores.map((store, idx) => {
-            const isSource = Boolean(sourceStoreName && store.name === sourceStoreName);
+            const isSource = Boolean(sourceStoreName && store.name.toLowerCase() === sourceStoreName.toLowerCase());
             const isDirect = Boolean(isSource || isDirectProductUrl(store.url));
             let cPrice;
             let oPrice;
@@ -1149,8 +1200,8 @@ function generateMockPipelineData(query) {
 
             if (isSource) {
                 cPrice = basePrice;
-                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.15));
-                disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+                oPrice = (originalPrice && originalPrice >= cPrice) ? originalPrice : Math.round(cPrice * 1.05);
+                disc = oPrice > cPrice ? Math.round(((oPrice - cPrice) / oPrice) * 100) : 0;
                 avail = "In Stock (Exact Match)";
                 isExactMatch = true;
                 matchType = "EXACT_MODEL";
@@ -1164,17 +1215,21 @@ function generateMockPipelineData(query) {
                 matchType = "CATEGORY_SIMILAR";
                 actionLabel = `Search Similar on ${store.name} ↗`;
             } else if (isDirect) {
-                cPrice = Math.round((basePrice * (store.mult || 1.0)) / 10) * 10;
-                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.18));
-                disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+                cPrice = (category === "Beauty & Personal Care" && basePrice < 200)
+                    ? Math.round(basePrice * (store.mult || 1.0))
+                    : Math.round((basePrice * (store.mult || 1.0)) / 10) * 10;
+                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.08));
+                disc = oPrice > cPrice ? Math.round(((oPrice - cPrice) / oPrice) * 100) : 0;
                 avail = "In Stock (Exact Model)";
                 isExactMatch = true;
                 matchType = "EXACT_MODEL";
                 actionLabel = `Buy on ${store.name} ↗ (Exact Model)`;
             } else {
-                cPrice = Math.round((basePrice * (store.mult || 1.0)) / 10) * 10;
-                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.18));
-                disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
+                cPrice = (category === "Beauty & Personal Care" && basePrice < 200)
+                    ? Math.round(basePrice * (store.mult || 1.0))
+                    : Math.round((basePrice * (store.mult || 1.0)) / 10) * 10;
+                oPrice = Math.max(originalPrice, Math.round(cPrice * 1.08));
+                disc = oPrice > cPrice ? Math.round(((oPrice - cPrice) / oPrice) * 100) : 0;
                 avail = "Available in Search";
                 isExactMatch = false;
                 matchType = "SEARCH_COMPARISON";
