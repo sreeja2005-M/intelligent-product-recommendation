@@ -390,6 +390,7 @@ function cleanSearchTerm(title) {
         "smartwatch", "watch",
         "phone", "smartphone", "mobile", "iphone",
         "kurta", "kurti", "saree", "shirt", "tshirt", "t-shirt", "jeans", "dress", "jacket", "shoes", "sneakers",
+        "trimmer", "facial", "shaver", "epilator", "grooming", "dryer", "straightener", "curler", "massager",
         "lip liner", "lipliner", "lipstick", "lip gloss", "lip balm", "kajal", "eyeliner", "mascara", "foundation", "serum", "sunscreen", "moisturizer"
     ];
 
@@ -1223,7 +1224,10 @@ exports.handler = async function (event, context) {
         productName = "Smart Buy Product";
     }
 
-    const text = (productName + " " + targetUrl).toLowerCase();
+    // Extract clean product title for accurate semantic matching without URL tracking noise
+    const cleanTitle = (productName || cleanSearchTerm(targetUrl)).toLowerCase();
+    // Use cleanTitle for model matching so tracking parameters like ?pid=... or itm3... cannot trigger false matches
+    const text = (productName + " " + cleanSearchTerm(productName)).toLowerCase();
 
     const isBeauty = [
         "lip liner", "lipliner", "lipstick", "lip gloss", "lip balm", "kajal", "eyeliner", "mascara", 
@@ -1231,7 +1235,9 @@ exports.handler = async function (event, context) {
         "makeup", "cosmetics", "cosmetic", "skincare", "skin care", "serum", "sunscreen", "moisturizer", 
         "face wash", "body wash", "lotion", "toner", "shampoo", "conditioner", "hair oil", "perfume", "deodorant",
         "mars", "maybelline", "lakme", "nykaa", "sugar cosmetics", "colorbar", "mamaearth", "mcaffeine", 
-        "plum goodness", "biotique", "dot & key", "minimalist", "cetaphil", "huda beauty"
+        "plum goodness", "biotique", "dot & key", "minimalist", "cetaphil", "huda beauty",
+        "renee", "trimmer", "facial trimmer", "shaver", "epilator", "hair removal", "grooming", 
+        "hair dryer", "straightener", "curler", "massager", "vega", "philips trimmer", "nova"
     ].some(k => new RegExp(`\\b${k}\\b`, 'i').test(text));
 
     const isElectronics = !isBeauty && (
@@ -1276,9 +1282,9 @@ exports.handler = async function (event, context) {
         else if (text.includes('iphone 16 pro') || text.includes('iphone 15 pro')) basePrice = 119900;
         else if (text.includes('iphone 16 plus') || text.includes('iphone-16-plus')) basePrice = 89900;
         else if (text.includes('iphone 16') || text.includes('iphone-16')) basePrice = 76999;
-        else if (text.includes('iphone 15 plus') || text.includes('15 plus')) basePrice = 76900;
+        else if (text.includes('iphone 15 plus') || text.includes('iphone-15-plus')) basePrice = 76900;
         else if (text.includes('iphone 15') || text.includes('iphone-15')) basePrice = 58999;
-        else if (text.includes('iphone 14 plus') || text.includes('14 plus')) basePrice = 59999;
+        else if (text.includes('iphone 14 plus') || text.includes('iphone-14-plus')) basePrice = 59999;
         else if (text.includes('iphone 14') || text.includes('iphone-14')) basePrice = 52999;
         else if (text.includes('iphone 13') || text.includes('iphone-13')) basePrice = 44999;
         else if (text.includes('iphone')) basePrice = 54990;
@@ -1293,7 +1299,7 @@ exports.handler = async function (event, context) {
         else if (text.includes('galaxy m35') || text.includes('galaxy m34') || text.includes('galaxy f54')) basePrice = 16999;
         else if (text.includes('samsung') && (text.includes('5g') || text.includes('galaxy') || text.includes('phone'))) basePrice = 24999;
         else if ((text.includes('oneplus 12') || text.includes('oneplus 11')) && !text.includes('12r') && !text.includes('11r')) basePrice = 59999;
-        else if (text.includes('oneplus 12r') || text.includes('oneplus 11r') || text.includes('12r') || text.includes('11r')) basePrice = 39999;
+        else if (text.includes('oneplus 12r') || text.includes('oneplus 11r')) basePrice = 39999;
         else if (text.includes('oneplus nord 4') || text.includes('oneplus nord 3')) basePrice = 28999;
         else if (text.includes('nord ce 4') || text.includes('nord ce 3') || text.includes('oneplus nord ce')) basePrice = 19999;
         else if (text.includes('pixel 9 pro') || text.includes('pixel 8 pro')) basePrice = 106999;
@@ -1311,7 +1317,7 @@ exports.handler = async function (event, context) {
         else if (text.includes('vivo v40') || text.includes('vivo v30')) basePrice = 31999;
         else if (text.includes('phone') || text.includes('mobile') || text.includes('smartphone') || text.includes('5g')) basePrice = 17999;
         else if (text.includes('macbook pro')) basePrice = 159900;
-        else if (text.includes('macbook air') || text.includes('m2') || text.includes('m3')) basePrice = 84990;
+        else if (text.includes('macbook air') || text.includes('macbook m2') || text.includes('macbook m3') || text.includes('apple m2') || text.includes('apple m3')) basePrice = 84990;
         else if (text.includes('rtx 4070') || text.includes('rtx 4060')) basePrice = 79990;
         else if (text.includes('rtx 3050') || text.includes('gaming laptop')) basePrice = 58990;
         else if (text.includes('laptop') || text.includes('notebook')) basePrice = 44990;
@@ -1344,6 +1350,8 @@ exports.handler = async function (event, context) {
         else if (text.includes('safari') || text.includes('backpack') || text.includes('trolley') || text.includes('bag')) basePrice = 1299;
         else if (text.includes('kurta') || text.includes('kurti') || text.includes('saree') || text.includes('ethnic') || text.includes('dress')) basePrice = 699;
         else if (text.includes('jeans') || text.includes('jacket') || text.includes('shirt') || text.includes('t-shirt') || text.includes('hoodie')) basePrice = 799;
+        else if (text.includes('facial trimmer') || text.includes('trimmer') || text.includes('shaver') || text.includes('epilator') || text.includes('hair removal')) basePrice = 699;
+        else if (text.includes('hair dryer') || text.includes('straightener') || text.includes('curler') || text.includes('grooming')) basePrice = 899;
         else if (text.includes('lip liner') || text.includes('lipliner') || text.includes('kajal')) basePrice = 99;
         else if (text.includes('lipstick') || text.includes('lip balm')) basePrice = 249;
         else if (text.includes('serum') || text.includes('sunscreen') || text.includes('moisturizer')) basePrice = 399;

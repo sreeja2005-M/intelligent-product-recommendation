@@ -7,14 +7,18 @@ from sqlalchemy.orm import Session
 
 
 def detect_product_category(product_name: str, query: str) -> str:
-    text = (product_name + " " + query).lower()
+    raw_combined = (product_name + " " + query).lower()
+    # Strip URL query parameters so parameters like ?pid=... don't pollute category matching
+    text = re.sub(r'https?://\S+', '', raw_combined).strip() or raw_combined
     beauty_keywords = [
         "lip liner", "lipliner", "lipstick", "lip gloss", "lip balm", "kajal", "eyeliner", "mascara", 
         "eyeshadow", "foundation", "concealer", "compact", "blush", "highlighter", "primer",
         "makeup", "cosmetics", "cosmetic", "skincare", "skin care", "serum", "sunscreen", "moisturizer", 
         "face wash", "body wash", "lotion", "toner", "shampoo", "conditioner", "hair oil", "perfume", "deodorant",
         "mars", "maybelline", "lakme", "nykaa", "sugar cosmetics", "colorbar", "mamaearth", "mcaffeine", 
-        "plum goodness", "biotique", "dot & key", "minimalist", "cetaphil", "huda beauty"
+        "plum goodness", "biotique", "dot & key", "minimalist", "cetaphil", "huda beauty",
+        "renee", "trimmer", "facial trimmer", "shaver", "epilator", "hair removal", "grooming", 
+        "hair dryer", "straightener", "curler", "massager", "vega", "philips trimmer", "nova"
     ]
     if any(re.search(rf"\b{re.escape(k)}\b", text) for k in beauty_keywords):
         return "Beauty & Personal Care"
@@ -243,7 +247,9 @@ def clean_search_term(title: str) -> str:
         "smartwatch", "watch",
         "phone", "smartphone", "mobile", "iphone",
         "laptop", "macbook", "tablet", "ipad",
-        "kurta", "kurti", "saree", "shirt", "tshirt", "t-shirt", "jeans", "dress", "jacket", "shoes", "sneakers"
+        "kurta", "kurti", "saree", "shirt", "tshirt", "t-shirt", "jeans", "dress", "jacket", "shoes", "sneakers",
+        "trimmer", "facial", "shaver", "epilator", "grooming", "dryer", "straightener", "curler", "massager",
+        "lip liner", "lipliner", "lipstick", "lip gloss", "lip balm", "kajal", "eyeliner", "mascara", "foundation", "serum", "sunscreen", "moisturizer"
     ]
 
     result_words = words
@@ -361,7 +367,8 @@ def is_accessory_item(text: str) -> bool:
     return any(re.search(rf'\b{re.escape(k)}\b', lower) for k in ACCESSORY_KEYWORDS)
 
 def estimate_realistic_base_price(product_name: str, query: str) -> float:
-    text = (product_name + " " + query).lower()
+    clean_title = (product_name or clean_search_term(query)).lower()
+    text = (product_name + " " + clean_search_term(product_name or query)).lower()
     
     # Explicit price match with currency symbol or price prefix ONLY
     explicit_match = re.search(r'(?:rs\.?|inr|₹|price\s*:?)\s*(\d{2,7})', text, re.IGNORECASE)
@@ -397,11 +404,11 @@ def estimate_realistic_base_price(product_name: str, query: str) -> float:
         return 89900.0
     elif any(k in text for k in ["iphone 16", "iphone-16"]):
         return 76999.0
-    elif any(k in text for k in ["iphone 15 plus", "15 plus"]):
+    elif any(k in text for k in ["iphone 15 plus", "iphone-15-plus"]):
         return 76900.0
     elif any(k in text for k in ["iphone 15", "iphone-15"]):
         return 58999.0
-    elif any(k in text for k in ["iphone 14 plus", "14 plus"]):
+    elif any(k in text for k in ["iphone 14 plus", "iphone-14-plus"]):
         return 59999.0
     elif any(k in text for k in ["iphone 14", "iphone-14"]):
         return 52999.0
@@ -435,7 +442,7 @@ def estimate_realistic_base_price(product_name: str, query: str) -> float:
     # OnePlus & Pixel
     if any(k in text for k in ["oneplus 12", "oneplus 11"]) and "12r" not in text and "11r" not in text:
         return 59999.0
-    elif any(k in text for k in ["oneplus 12r", "oneplus 11r", "12r", "11r"]):
+    elif any(k in text for k in ["oneplus 12r", "oneplus 11r"]):
         return 39999.0
     elif any(k in text for k in ["oneplus nord 4", "oneplus nord 3"]):
         return 28999.0
@@ -481,7 +488,7 @@ def estimate_realistic_base_price(product_name: str, query: str) -> float:
     # Laptops & Computing
     if any(k in text for k in ["macbook pro"]):
         return 159900.0
-    elif any(k in text for k in ["macbook air", "m2", "m3"]):
+    elif any(k in text for k in ["macbook air", "macbook m2", "macbook m3", "apple m2", "apple m3"]):
         return 84990.0
     elif any(k in text for k in ["rtx 4070", "rtx 4060", "rog zephyrus", "legion 5", "predator"]):
         return 79990.0
@@ -563,6 +570,12 @@ def estimate_realistic_base_price(product_name: str, query: str) -> float:
         return 699.0
     elif any(k in text for k in ["jeans", "jacket", "shirt", "t-shirt", "tshirt", "hoodie"]):
         return 799.0
+
+    # Personal Care & Grooming Appliances
+    if any(k in text for k in ["facial trimmer", "trimmer", "shaver", "epilator", "hair removal"]):
+        return 699.0
+    elif any(k in text for k in ["hair dryer", "straightener", "curler", "grooming"]):
+        return 899.0
 
     # Cosmetics & Skincare
     if any(k in text for k in ["lip liner", "lipliner", "kajal", "eyeliner"]):
