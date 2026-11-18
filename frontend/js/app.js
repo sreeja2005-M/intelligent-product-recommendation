@@ -1175,6 +1175,24 @@ function cleanSearchTerm(title) {
     return resultWords.join(' ') || title;
 }
 
+const ACCESSORY_KEYWORDS = [
+    "case", "cover", "back cover", "flip cover", "bumper", "housing", "skin", "wrap", "decal",
+    "tempered", "tempered glass", "screen guard", "screen protector", "camera protector", "lens protector", "scratch guard", "film", "paperfeel",
+    "cable", "cord", "wire", "type-c", "type c", "lightning cable", "charging cable", "data cable", "aux cable", "hdmi",
+    "charger", "adapter", "power adapter", "charging brick", "car charger", "wireless charger", "fast charger",
+    "strap", "band", "watch strap", "watch band", "wrist band", "loop", "buckle", "bracelet",
+    "ear tips", "eartips", "ear pads", "earpad", "ear cushions", "silicone case", "airpod case", "earphone case",
+    "stand", "holder", "mount", "car mount", "tripod", "selfie stick", "popsocket", "ring holder", "phone grip",
+    "sleeve", "pouch", "bag", "laptop sleeve", "tablet sleeve",
+    "cleaning kit", "cleaner", "stylus tip", "pencil tip", "sim ejector", "keychain", "sticker", "toy"
+];
+
+function isAccessoryItem(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    return ACCESSORY_KEYWORDS.some(k => new RegExp(`\\b${k}\\b`, 'i').test(lower));
+}
+
 function isDirectProductUrl(url) {
     if (!url) return false;
     const lower = url.toLowerCase();
@@ -1273,7 +1291,8 @@ function generateMockPipelineData(query, manualPrice = null) {
     const isFashion = !isBeauty && ["kurta", "kurti", "saree", "suit", "anarkali", "salwar", "lehenga", "ethnic", "dress", "shirt", "jeans", "t-shirt", "jacket", "top", "palazzo", "legging", "clothing", "apparel", "fashion", "dupatta"].some(k => text.includes(k));
 
     let category = "General";
-    if (isBeauty) category = "Beauty & Personal Care";
+    if (isAccessoryItem(text)) category = "Mobile Accessories";
+    else if (isBeauty) category = "Beauty & Personal Care";
     else if (isElectronics) category = "Electronics";
     else if (isFashion) category = "Fashion";
 
@@ -1292,7 +1311,25 @@ function generateMockPipelineData(query, manualPrice = null) {
     }
 
     if (!basePrice) {
-        if (text.includes('iphone 16 pro max') || text.includes('iphone 15 pro max')) {
+        if (isAccessoryItem(text)) {
+            if (text.includes('tempered') || text.includes('glass') || text.includes('screen protector') || text.includes('lens')) {
+                basePrice = 249;
+            } else if (text.includes('spigen') || text.includes('ringke') || text.includes('leather') || text.includes('rugged')) {
+                basePrice = 799;
+            } else if (text.includes('cable') || text.includes('wire') || text.includes('cord')) {
+                basePrice = 299;
+            } else if (text.includes('charger') || text.includes('adapter') || text.includes('power bank')) {
+                basePrice = 699;
+            } else if (text.includes('strap') || text.includes('band')) {
+                basePrice = 349;
+            } else if (text.includes('case') || text.includes('cover') || text.includes('skin') || text.includes('pouch')) {
+                basePrice = 399;
+            } else if (text.includes('stand') || text.includes('holder') || text.includes('mount')) {
+                basePrice = 449;
+            } else {
+                basePrice = 399;
+            }
+        } else if (text.includes('iphone 16 pro max') || text.includes('iphone 15 pro max')) {
             basePrice = 144900;
         } else if (text.includes('iphone 16 pro') || text.includes('iphone 15 pro')) {
             basePrice = 119900;
@@ -1599,7 +1636,8 @@ function generateMockPipelineData(query, manualPrice = null) {
         }
     ];
 
-    const benchmark = BENCHMARKS.find(b => b.matches(text));
+    const isAccessory = isAccessoryItem(text);
+    const benchmark = isAccessory ? null : BENCHMARKS.find(b => b.matches(text));
     let prices = [];
 
     if (benchmark) {

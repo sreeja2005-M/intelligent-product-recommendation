@@ -404,6 +404,24 @@ function cleanSearchTerm(title) {
     return resultWords.join(' ') || title;
 }
 
+const ACCESSORY_KEYWORDS = [
+    "case", "cover", "back cover", "flip cover", "bumper", "housing", "skin", "wrap", "decal",
+    "tempered", "tempered glass", "screen guard", "screen protector", "camera protector", "lens protector", "scratch guard", "film", "paperfeel",
+    "cable", "cord", "wire", "type-c", "type c", "lightning cable", "charging cable", "data cable", "aux cable", "hdmi",
+    "charger", "adapter", "power adapter", "charging brick", "car charger", "wireless charger", "fast charger",
+    "strap", "band", "watch strap", "watch band", "wrist band", "loop", "buckle", "bracelet",
+    "ear tips", "eartips", "ear pads", "earpad", "ear cushions", "silicone case", "airpod case", "earphone case",
+    "stand", "holder", "mount", "car mount", "tripod", "selfie stick", "popsocket", "ring holder", "phone grip",
+    "sleeve", "pouch", "bag", "laptop sleeve", "tablet sleeve",
+    "cleaning kit", "cleaner", "stylus tip", "pencil tip", "sim ejector", "keychain", "sticker", "toy"
+];
+
+function isAccessoryItem(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    return ACCESSORY_KEYWORDS.some(k => new RegExp(`\\b${k}\\b`, 'i').test(lower));
+}
+
 function isDirectProductUrl(url) {
     if (!url) return false;
     const lower = url.toLowerCase();
@@ -773,6 +791,12 @@ function extractProductInfo(html, url) {
         if (mMatch) originalPrice = parseFloat(mMatch[1].replace(/,/g, ''));
     }
 
+    // Safety guard: Accessories should never inherit device prices (>= 5000) from recommendation carousels
+    if (isAccessoryItem((productName || '') + ' ' + (url || '')) && currentPrice && currentPrice >= 4999) {
+        currentPrice = null;
+        originalPrice = null;
+    }
+
     return {
         productName,
         currentPrice,
@@ -1085,6 +1109,13 @@ const VERIFIED_BENCHMARKS = [
 ];
 
 function getCategoryReviews(category, productName) {
+    if (category === "Mobile Accessories") {
+        return [
+            { reviewer_name: "Rahul Sharma", review_text: `Perfect fit for ${productName}. Precise cutouts and excellent grip. Value for money.`, rating: 5, is_fake: 0, reason: "Natural vocabulary distribution and authentic purchase context." },
+            { reviewer_name: "Amit Patel", review_text: "Good quality material and provides decent drop protection. Delivered on time.", rating: 4, is_fake: 0, reason: "Verified buyer pattern and balanced product feedback." },
+            { reviewer_name: "DealsBot_2026", review_text: "MUST BUY BEST ACCESSORY CHEAPEST PRICE CLICK LINK DISCOUNT!", rating: 5, is_fake: 1, reason: "Repetitive promotional spam and emotional over-exaggeration pattern detected." }
+        ];
+    }
     if (category === "Electronics") {
         return [
             { reviewer_name: "Rahul Sharma", review_text: `Outstanding performance and premium build quality for ${productName}. Battery easily lasts all day.`, rating: 5, is_fake: 0, reason: "Natural vocabulary distribution and authentic purchase context." },
@@ -1215,14 +1246,33 @@ exports.handler = async function (event, context) {
     const isFashion = !isBeauty && ["kurta", "kurti", "saree", "suit", "anarkali", "salwar", "lehenga", "ethnic", "dress", "shirt", "jeans", "t-shirt", "jacket", "top", "palazzo", "legging", "clothing", "apparel", "fashion", "dupatta"].some(k => text.includes(k));
 
     let category = "General";
-    if (isBeauty) category = "Beauty & Personal Care";
+    if (isAccessoryItem(text)) category = "Mobile Accessories";
+    else if (isBeauty) category = "Beauty & Personal Care";
     else if (isElectronics) category = "Electronics";
     else if (isFashion) category = "Fashion";
 
     // Establish base and original price
     let basePrice = manualPrice || extracted.currentPrice;
     if (!basePrice || basePrice <= 0) {
-        if (text.includes('iphone 16 pro max') || text.includes('iphone 15 pro max')) basePrice = 144900;
+        if (isAccessoryItem(text)) {
+            if (text.includes('tempered') || text.includes('glass') || text.includes('screen protector') || text.includes('lens')) {
+                basePrice = 249;
+            } else if (text.includes('spigen') || text.includes('ringke') || text.includes('leather') || text.includes('rugged')) {
+                basePrice = 799;
+            } else if (text.includes('cable') || text.includes('wire') || text.includes('cord')) {
+                basePrice = 299;
+            } else if (text.includes('charger') || text.includes('adapter') || text.includes('power bank')) {
+                basePrice = 699;
+            } else if (text.includes('strap') || text.includes('band')) {
+                basePrice = 349;
+            } else if (text.includes('case') || text.includes('cover') || text.includes('skin') || text.includes('pouch')) {
+                basePrice = 399;
+            } else if (text.includes('stand') || text.includes('holder') || text.includes('mount')) {
+                basePrice = 449;
+            } else {
+                basePrice = 399;
+            }
+        } else if (text.includes('iphone 16 pro max') || text.includes('iphone 15 pro max')) basePrice = 144900;
         else if (text.includes('iphone 16 pro') || text.includes('iphone 15 pro')) basePrice = 119900;
         else if (text.includes('iphone 16 plus') || text.includes('iphone-16-plus')) basePrice = 89900;
         else if (text.includes('iphone 16') || text.includes('iphone-16')) basePrice = 76999;
@@ -1362,7 +1412,8 @@ exports.handler = async function (event, context) {
     const isPlatformExclusive = Boolean(isUrl && sourceStoreName && !isUniversalBrand);
 
     const matchText = (cleanTerm + " " + targetUrl).toLowerCase();
-    const benchmark = VERIFIED_BENCHMARKS.find(b => b.matches(matchText));
+    const isAccessory = isAccessoryItem(matchText);
+    const benchmark = isAccessory ? null : VERIFIED_BENCHMARKS.find(b => b.matches(matchText));
 
     let priceList = [];
     if (benchmark) {

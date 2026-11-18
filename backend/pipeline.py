@@ -341,6 +341,25 @@ def get_store_search_url(store_name: str, clean_term: str) -> str:
 
 
 
+
+ACCESSORY_KEYWORDS = [
+    "case", "cover", "back cover", "flip cover", "bumper", "housing", "skin", "wrap", "decal",
+    "tempered", "tempered glass", "screen guard", "screen protector", "camera protector", "lens protector", "scratch guard", "film", "paperfeel",
+    "cable", "cord", "wire", "type-c", "type c", "lightning cable", "charging cable", "data cable", "aux cable", "hdmi",
+    "charger", "adapter", "power adapter", "charging brick", "car charger", "wireless charger", "fast charger",
+    "strap", "band", "watch strap", "watch band", "wrist band", "loop", "buckle", "bracelet",
+    "ear tips", "eartips", "ear pads", "earpad", "ear cushions", "silicone case", "airpod case", "earphone case",
+    "stand", "holder", "mount", "car mount", "tripod", "selfie stick", "popsocket", "ring holder", "phone grip",
+    "sleeve", "pouch", "bag", "laptop sleeve", "tablet sleeve",
+    "cleaning kit", "cleaner", "stylus tip", "pencil tip", "sim ejector", "keychain", "sticker", "toy"
+]
+
+def is_accessory_item(text: str) -> bool:
+    if not text:
+        return False
+    lower = text.lower()
+    return any(re.search(rf'\b{re.escape(k)}\b', lower) for k in ACCESSORY_KEYWORDS)
+
 def estimate_realistic_base_price(product_name: str, query: str) -> float:
     text = (product_name + " " + query).lower()
     
@@ -350,6 +369,24 @@ def estimate_realistic_base_price(product_name: str, query: str) -> float:
         val = float(explicit_match.group(1))
         if 49 <= val <= 350000:
             return val
+
+    # Mobile & Tech Accessories (MUST precede phone model matching)
+    if is_accessory_item(text):
+        if any(k in text for k in ['tempered', 'glass', 'screen protector', 'guard', 'lens']):
+            return 249.0
+        elif any(k in text for k in ['spigen', 'ringke', 'leather', 'rugged']):
+            return 799.0
+        elif any(k in text for k in ['cable', 'cord', 'wire']):
+            return 299.0
+        elif any(k in text for k in ['charger', 'adapter', 'power bank']):
+            return 699.0
+        elif any(k in text for k in ['strap', 'band']):
+            return 349.0
+        elif any(k in text for k in ['case', 'cover', 'skin', 'pouch']):
+            return 399.0
+        elif any(k in text for k in ['stand', 'holder', 'mount']):
+            return 449.0
+        return 399.0
 
     # High-precision smartphones
     if any(k in text for k in ["iphone 16 pro max", "iphone 15 pro max", "16 pro max", "15 pro max"]):
@@ -994,14 +1031,16 @@ def run_full_recommendation_pipeline(query: str, db: Session, manual_price: Opti
     encoded_name = quote_plus(clean_term)
     dash_name = encoded_name.replace('+', '-')
 
-    # Direct links for common high-volume electronics
+    # Direct links for common high-volume electronics (exclude accessories)
+    is_acc = is_accessory_item(clean_term + " " + query) or is_accessory_item(product_name)
     direct_amazon_url = None
     direct_flipkart_url = None
-    if "realme p4" in product_name.lower() or "realme-p4" in query.lower():
-        direct_amazon_url = "https://www.amazon.in/dp/B0HBCLFSZ1"
-    elif "iphone 16" in product_name.lower() or "iphone-16" in query.lower():
-        direct_amazon_url = "https://www.amazon.in/dp/B0DGHZWBYB"
-        direct_flipkart_url = "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef"
+    if not is_acc:
+        if "realme p4" in product_name.lower() or "realme-p4" in query.lower():
+            direct_amazon_url = "https://www.amazon.in/dp/B0HBCLFSZ1"
+        elif "iphone 16" in product_name.lower() or "iphone-16" in query.lower():
+            direct_amazon_url = "https://www.amazon.in/dp/B0DGHZWBYB"
+            direct_flipkart_url = "https://www.flipkart.com/apple-iphone-16-plus-black-128-gb/p/itm1abbae671f9ef"
 
     if category == "Fashion":
         amazon_url = query if "amazon." in domain else (direct_amazon_url or get_store_search_url("Amazon", clean_term))
@@ -1064,7 +1103,8 @@ def run_full_recommendation_pipeline(query: str, db: Session, manual_price: Opti
     is_platform_exclusive = bool(is_url and scraped_site and not is_universal_brand)
 
     match_benchmark_text = f"{clean_term} {query}".lower()
-    matched_benchmark = next((b for b in VERIFIED_BENCHMARKS if b["matches"](match_benchmark_text)), None)
+    is_acc = is_accessory_item(match_benchmark_text) or is_accessory_item(product_name)
+    matched_benchmark = None if is_acc else next((b for b in VERIFIED_BENCHMARKS if b["matches"](match_benchmark_text)), None)
 
     price_entries = []
     scraped_price = base_price
