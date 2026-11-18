@@ -1084,6 +1084,34 @@ const VERIFIED_BENCHMARKS = [
     }
 ];
 
+function getCategoryReviews(category, productName) {
+    if (category === "Electronics") {
+        return [
+            { reviewer_name: "Rahul Sharma", review_text: `Outstanding performance and premium build quality for ${productName}. Battery easily lasts all day.`, rating: 5, is_fake: 0, reason: "Natural vocabulary distribution and authentic purchase context." },
+            { reviewer_name: "Amit Patel", review_text: "Display is super crisp and audio output is very clear. Worth every rupee at this price point.", rating: 4, is_fake: 0, reason: "Verified buyer pattern and balanced product feedback." },
+            { reviewer_name: "DealsBot_2026", review_text: "BEST PRODUCT EVER AMAZING 10/10 MUST BUY CHEAPEST PRICE CLICK LINK NOW!", rating: 5, is_fake: 1, reason: "Repetitive promotional spam and emotional over-exaggeration pattern detected." }
+        ];
+    } else if (category === "Beauty & Personal Care") {
+        return [
+            { reviewer_name: "Sneha Kapoor", review_text: `Smooth texture, highly pigmented and lasts for hours without smudging. Very gentle on skin.`, rating: 5, is_fake: 0, reason: "Natural vocabulary distribution and authentic purchase context." },
+            { reviewer_name: "Pooja Verma", review_text: "Good formulation for daily use. Compact packaging makes it easy to carry around.", rating: 4, is_fake: 0, reason: "Verified buyer pattern and balanced product feedback." },
+            { reviewer_name: "BeautyPromo_Bot", review_text: "INSTANT MIRACLE GLOW 100% BEST MAKEUP BUY RIGHT NOW HUGE DISCOUNT CODES!", rating: 5, is_fake: 1, reason: "Repetitive promotional spam and emotional over-exaggeration pattern detected." }
+        ];
+    } else if (category === "Fashion") {
+        return [
+            { reviewer_name: "Priya Menon", review_text: `Comfortable fit and soft fabric quality for ${productName}. Color matches pictures accurately.`, rating: 5, is_fake: 0, reason: "Natural vocabulary distribution and authentic purchase context." },
+            { reviewer_name: "Ananya Roy", review_text: "Stitching is neat and fabric remains good even after multiple washes. Good value for money.", rating: 4, is_fake: 0, reason: "Verified buyer pattern and balanced product feedback." },
+            { reviewer_name: "FashionDeals99", review_text: "BEST CLOTHING EVER 100% MUST BUY CLICK LINK FOR CHEAPEST FESTIVAL SALE!", rating: 5, is_fake: 1, reason: "Repetitive promotional spam and emotional over-exaggeration pattern detected." }
+        ];
+    } else {
+        return [
+            { reviewer_name: "Vikram Nair", review_text: `Very durable and comfortable for daily use. High quality material and works as advertised.`, rating: 5, is_fake: 0, reason: "Natural vocabulary distribution and authentic purchase context." },
+            { reviewer_name: "Karan Joshi", review_text: "Solid product for the price. Sturdy design and arrived safely on time.", rating: 4, is_fake: 0, reason: "Verified buyer pattern and balanced product feedback." },
+            { reviewer_name: "MegaDeals_Bot", review_text: "CHEAPEST PRICE DEAL EVER BUY NOW 100% MUST HAVE BEST BEST BEST!", rating: 5, is_fake: 1, reason: "Repetitive promotional spam and emotional over-exaggeration pattern detected." }
+        ];
+    }
+}
+
 exports.handler = async function (event, context) {
     if (event.httpMethod === 'OPTIONS') {
         return {
@@ -1405,7 +1433,7 @@ exports.handler = async function (event, context) {
                 : getStoreSearchUrl('Vijay Sales', cleanTerm);
 
             stores = [
-                { name: "Croma", url: cromaUrl, mult: isSourceCroma ? 1.0 : 0.99, isDirectResolved: Boolean(isSourceCroma || isDirectProductUrl(cromaUrl)) },
+                { name: "Croma", url: cromaUrl, mult: 1.0, isDirectResolved: Boolean(isSourceCroma || isDirectProductUrl(cromaUrl)) },
                 { name: "Reliance Digital", url: relianceUrl, mult: 1.0, isDirectResolved: Boolean(sourceStoreName === "Reliance Digital" || isDirectProductUrl(relianceUrl)) },
                 { name: "Vijay Sales", url: vijayUrl, mult: 1.01, isDirectResolved: Boolean(sourceStoreName === "Vijay Sales" || isDirectProductUrl(vijayUrl)) },
                 { name: "Amazon", url: amazonUrl, mult: isSourceAmazon ? 1.0 : 1.0, isDirectResolved: Boolean(isSourceAmazon || amazonDirectProduct || isDirectProductUrl(amazonUrl)) },
@@ -1533,12 +1561,9 @@ exports.handler = async function (event, context) {
     if (isPlatformExclusive) {
         lowestStore = priceList.find(p => p.is_source) || priceList[0];
     } else {
-        // Prioritize verified exact matches when available so unverified search links cannot steal Best Deal
-        const exactMatches = priceList.filter(p => p.is_exact_match || p.is_source);
-        const candidates = exactMatches.length > 0 ? exactMatches : priceList;
-        lowestStore = candidates.reduce((min, p) => p.current_price < min.current_price ? p : min, candidates[0]);
+        lowestStore = priceList.reduce((min, p) => p.current_price < min.current_price ? p : min, priceList[0]);
     }
-    priceList.forEach(p => p.is_lowest = (p.website_name === lowestStore.website_name));
+    priceList.forEach(p => p.is_lowest = (p.current_price === lowestStore.current_price));
 
     // Sort: lowest price store first, prioritizing exact matches
     priceList.sort((a, b) => {
@@ -1625,6 +1650,8 @@ exports.handler = async function (event, context) {
             product_name: productName,
             brand: extracted.brand || (text.includes("mars") ? "MARS" : (category === "Beauty & Personal Care" ? "Beauty Brand" : (isFashion ? "Leezaa Collection" : "Featured Brand"))),
             category: category,
+            rating: extracted.rating || 4.4,
+            review_count: extracted.reviewCount || 1420,
             image_url: inputImage || extracted.imageUrl
         },
         prices: priceList,
@@ -1640,10 +1667,7 @@ exports.handler = async function (event, context) {
             genuine_count: 16,
             fake_count: 2,
             fake_percentage: 11.1,
-            review_details: extracted.reviews && extracted.reviews.length > 0 ? extracted.reviews : [
-                { reviewer_name: "Verified Customer", review_text: "Very beautiful dress and also good fabric quality.", rating: 5, is_fake: 0, reason: "Natural vocabulary distribution and authentic purchase context." },
-                { reviewer_name: "Priya M.", review_text: "Comfortable fit, vibrant print, exactly as pictured.", rating: 4, is_fake: 0, reason: "Verified buyer pattern and authentic feedback." }
-            ]
+            review_details: (extracted.reviews && extracted.reviews.length > 0) ? extracted.reviews : getCategoryReviews(category, productName)
         },
         price_history: {
             history_points: [

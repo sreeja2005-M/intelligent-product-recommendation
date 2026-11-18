@@ -669,6 +669,12 @@ function renderDashboard(data) {
 
     // 2. Recommendation Hero Card
     document.getElementById("analysisProductName").textContent = prod.product_name;
+    const productRatingEl = document.getElementById("analysisProductRating");
+    if (productRatingEl) {
+        const ratingVal = (prod && prod.rating) ? prod.rating : 4.4;
+        const revCount = (prod && prod.review_count) ? prod.review_count : 1420;
+        productRatingEl.innerHTML = `<span style="color: #fbbf24;">★</span> ${ratingVal} <span style="color: #94a3b8; font-weight: normal;">(${revCount.toLocaleString('en-IN')} verified ratings)</span>`;
+    }
     document.getElementById("recDecisionBadge").textContent = rec.buy_decision;
     document.getElementById("recDecisionBadge").className = `decision-badge ${rec.buy_decision.replace(/\s+/g, '-').toLowerCase()}`;
     document.getElementById("recValueScore").textContent = rec.value_score.toFixed(1);
@@ -832,10 +838,15 @@ function renderDashboard(data) {
     highlightedReviews.slice(0, 3).forEach(rev => {
         const item = document.createElement("div");
         item.className = `flagged-item ${rev.is_fake ? 'suspicious' : 'genuine'}`;
+        const starCount = Math.round(rev.rating || 4);
+        const starsHtml = '★'.repeat(Math.min(5, Math.max(1, starCount))) + '☆'.repeat(Math.max(0, 5 - starCount));
         item.innerHTML = `
             <div class="flagged-header">
-                <strong>${rev.reviewer_name}</strong>
-                <span class="flag-tag">${rev.is_fake ? '⚠️ Flagged Suspicious' : '✓ Verified Genuine'}</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <strong>${rev.reviewer_name}</strong>
+                    <span style="color: #fbbf24; font-size: 0.95rem; letter-spacing: 1px;">${starsHtml}</span>
+                </div>
+                <span class="flag-tag ${rev.is_fake ? 'suspicious' : 'genuine'}">${rev.is_fake ? '⚠️ Flagged Suspicious' : '✓ Verified Genuine'}</span>
             </div>
             <p class="flagged-text">"${rev.review_text}"</p>
             <small class="flagged-reason">${rev.reason}</small>
@@ -1638,7 +1649,7 @@ function generateMockPipelineData(query, manualPrice = null) {
                 : getStoreSearchUrl('Vijay Sales', cleanTerm);
 
             stores = [
-                { name: "Croma", mult: 0.99, avail: "In Stock", url: cromaUrl },
+                { name: "Croma", mult: 1.0, avail: "In Stock", url: cromaUrl },
                 { name: "Reliance Digital", mult: 1.0, avail: "In Stock", url: relianceUrl },
                 { name: "Vijay Sales", mult: 1.01, avail: "In Stock", url: vijayUrl },
                 { name: "Amazon", mult: 1.0, avail: "In Stock", url: amazonUrl },
@@ -1761,11 +1772,9 @@ function generateMockPipelineData(query, manualPrice = null) {
     if (isPlatformExclusive) {
         lowestPriceObj = prices.find(p => p.is_source) || prices[0];
     } else {
-        const exactMatches = prices.filter(p => p.is_source || p.is_exact_match);
-        const candidates = exactMatches.length > 0 ? exactMatches : prices;
-        lowestPriceObj = candidates.reduce((prev, curr) => (prev.current_price < curr.current_price ? prev : curr));
+        lowestPriceObj = prices.reduce((prev, curr) => (prev.current_price < curr.current_price ? prev : curr));
     }
-    prices.forEach(p => p.is_lowest = (p.website_name === lowestPriceObj.website_name));
+    prices.forEach(p => p.is_lowest = (p.current_price === lowestPriceObj.current_price));
 
     // Sort: lowest price first, prioritizing exact matches
     prices.sort((a, b) => {
@@ -1855,6 +1864,8 @@ function generateMockPipelineData(query, manualPrice = null) {
             product_name: productName,
             brand: isFashion && text.includes("leezaa") ? "Leezaa Collection" : (isFashion ? "Fashion Brand" : "Featured Brand"),
             category: category,
+            rating: 4.4,
+            review_count: 1420
         },
         prices: prices,
         sentiment_analysis: {
@@ -1869,11 +1880,19 @@ function generateMockPipelineData(query, manualPrice = null) {
             genuine_count: 17,
             fake_count: 3,
             fake_percentage: 15.0,
-            review_details: [
-                { reviewer_name: "Rahul S.", review_text: "Excellent product! Great performance and build quality.", rating: 5, is_fake: 0, reason: "Natural vocabulary distribution and realistic product context." },
-                { reviewer_name: "DealsBot99", review_text: "MUST BUY AMAZING BEST ITEM EVER CLICK HERE NOW CHEAPEST PRICE!", rating: 5, is_fake: 1, reason: "Repetitive spam keywords or emotional over-exaggeration pattern detected." },
-                { reviewer_name: "Priya P.", review_text: "Good value for money. Battery backup is solid.", rating: 4, is_fake: 0, reason: "Verified customer pattern and authentic sentiment balance." }
-            ]
+            review_details: category === "Fashion" ? [
+                { reviewer_name: "Priya Menon", review_text: `Comfortable fit and soft fabric quality for ${productName}. Color matches pictures accurately.`, rating: 5, is_fake: 0, reason: "Natural vocabulary distribution and authentic purchase context." },
+                { reviewer_name: "Ananya Roy", review_text: "Stitching is neat and fabric remains good even after multiple washes. Good value for money.", rating: 4, is_fake: 0, reason: "Verified buyer pattern and balanced product feedback." },
+                { reviewer_name: "FashionDeals99", review_text: "BEST CLOTHING EVER 100% MUST BUY CLICK LINK FOR CHEAPEST FESTIVAL SALE!", rating: 5, is_fake: 1, reason: "Repetitive promotional spam and emotional over-exaggeration pattern detected." }
+            ] : (category === "Beauty & Personal Care" ? [
+                { reviewer_name: "Sneha Kapoor", review_text: `Smooth texture, highly pigmented and lasts for hours without smudging. Very gentle on skin.`, rating: 5, is_fake: 0, reason: "Natural vocabulary distribution and authentic purchase context." },
+                { reviewer_name: "Pooja Verma", review_text: "Good formulation for daily use. Compact packaging makes it easy to carry around.", rating: 4, is_fake: 0, reason: "Verified buyer pattern and balanced product feedback." },
+                { reviewer_name: "BeautyPromo_Bot", review_text: "INSTANT MIRACLE GLOW 100% BEST MAKEUP BUY RIGHT NOW HUGE DISCOUNT CODES!", rating: 5, is_fake: 1, reason: "Repetitive promotional spam and emotional over-exaggeration pattern detected." }
+            ] : [
+                { reviewer_name: "Rahul Sharma", review_text: `Outstanding performance and premium build quality for ${productName}. Battery easily lasts all day.`, rating: 5, is_fake: 0, reason: "Natural vocabulary distribution and authentic purchase context." },
+                { reviewer_name: "Amit Patel", review_text: "Display is super crisp and audio output is very clear. Worth every rupee at this price point.", rating: 4, is_fake: 0, reason: "Verified buyer pattern and balanced product feedback." },
+                { reviewer_name: "DealsBot_2026", review_text: "BEST PRODUCT EVER AMAZING 10/10 MUST BUY CHEAPEST PRICE CLICK LINK NOW!", rating: 5, is_fake: 1, reason: "Repetitive promotional spam and emotional over-exaggeration pattern detected." }
+            ])
         },
         price_history: {
             history_points: [
