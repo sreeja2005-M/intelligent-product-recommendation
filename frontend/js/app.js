@@ -13,6 +13,7 @@ const API_BASE_URL = isLocalhost ? window.location.origin : RENDER_BACKEND_URL;
 
 const searchButton = document.getElementById("searchBtn");
 const searchInput = document.getElementById("productSearch");
+const manualPriceInput = document.getElementById("manualPriceInput");
 const uploadImageBtn = document.getElementById("uploadImageBtn");
 const productImageInput = document.getElementById("productImageInput");
 const searchBoxContainer = document.getElementById("searchBoxContainer");
@@ -204,7 +205,7 @@ async function identifyProductFromImage(base64Data, hint = "") {
             const extracted = extractProductInfoFromOcr(rawText);
 
             if (extracted && extracted.productName) {
-                applyDetectedProduct(extracted.productName, extracted.brand, extracted.category, "Visual OCR");
+                applyDetectedProduct(extracted.productName, extracted.brand, extracted.category, "Visual OCR", extracted.detectedPrice);
                 isImageScanning = false;
                 return;
             }
@@ -228,7 +229,7 @@ async function identifyProductFromImage(base64Data, hint = "") {
     isImageScanning = false;
 }
 
-function applyDetectedProduct(productName, brand, category, source) {
+function applyDetectedProduct(productName, brand, category, source, detectedPrice = null) {
     detectedImageProductName = productName;
     if (visionScanOverlay) visionScanOverlay.style.display = "none";
     if (visionStatusPill) {
@@ -237,12 +238,17 @@ function applyDetectedProduct(productName, brand, category, source) {
     }
     if (imageDetectedTitle) imageDetectedTitle.textContent = productName;
     if (imageDetectedSubtitle) {
-        imageDetectedSubtitle.textContent = `${brand ? brand + ' • ' : ''}${category || 'E-Commerce'} — Ready to compare prices`;
+        imageDetectedSubtitle.textContent = `${brand ? brand + ' • ' : ''}${category || 'E-Commerce'}${detectedPrice ? ' • ₹' + detectedPrice.toLocaleString('en-IN') : ''} — Ready to compare prices`;
     }
 
-    // Populate search input so user can inspect or edit
-    if (!searchInput.value.trim() || searchInput.value.startsWith("http")) {
+    // Populate search input only if empty - preserve URL if user entered one
+    if (!searchInput.value.trim()) {
         searchInput.value = productName;
+    }
+
+    // Auto-populate manual price input if detected from photo and user hasn't typed one
+    if (detectedPrice && manualPriceInput && !manualPriceInput.value) {
+        manualPriceInput.value = detectedPrice;
     }
 }
 
@@ -255,6 +261,7 @@ function removeImage() {
     if (searchInput.value === oldDetected) {
         searchInput.value = "";
     }
+    if (manualPriceInput) manualPriceInput.value = "";
     searchInput.placeholder = "Paste ANY product link OR upload photo...";
 }
 
@@ -359,14 +366,24 @@ function extractProductInfoFromOcr(rawText) {
 
     if (!detectedName || detectedName.trim().length < 3) return null;
 
+    let detectedPrice = null;
+    const priceMatch = rawText.match(/(?:rs\.?|inr|₹|price\s*:?)\s*([\d,]+(?:\.\d{1,2})?)/i);
+    if (priceMatch) {
+        const cleanNum = parseFloat(priceMatch[1].replace(/,/g, ''));
+        if (cleanNum >= 49 && cleanNum <= 500000) {
+            detectedPrice = cleanNum;
+        }
+    }
+
     return {
         productName: detectedName.replace(/\s+/g, ' ').trim(),
         brand: matchedBrand ? matchedBrand.name : null,
-        category: matchedBrand ? matchedBrand.cat : 'General'
+        category: matchedBrand ? matchedBrand.cat : 'General',
+        detectedPrice: detectedPrice
     };
 }
 
-async function fetchPipelineData(query, image = null) {
+async function fetchPipelineData(query, image = null, manualPrice = null) {
     const candidateUrls = [
         "/api/analyze-full",
         "/.netlify/functions/analyze",
@@ -380,6 +397,11 @@ async function fetchPipelineData(query, image = null) {
 
             const payload = { query: query };
             if (image) payload.image = image;
+            if (manualPrice) {
+                payload.price = manualPrice;
+                payload.manualPrice = manualPrice;
+                payload.manual_price = manualPrice;
+            }
 
             const response = await fetch(endpoint, {
                 method: "POST",
@@ -401,7 +423,7 @@ async function fetchPipelineData(query, image = null) {
     }
 
     console.warn("Live API endpoints unavailable. Falling back to AI pipeline simulation engine.");
-    return generateMockPipelineData(query);
+    return generateMockPipelineData(query, manualPrice);
 }
 
 async function searchProduct() {
@@ -455,8 +477,17 @@ async function searchProduct() {
         setStepStatus(1, "completed", currentImageBase64 ? "Photo & Input Ready" : "Input Ready");
         setStepStatus(2, "active", "Scraping Multi-Store Live Retail Prices...");
         
+        // Read optional manual price input
+        let manualPrice = null;
+        if (manualPriceInput && manualPriceInput.value.trim()) {
+            const p = parseFloat(manualPriceInput.value.replace(/,/g, '').trim());
+            if (p && p >= 49 && p <= 500000) {
+                manualPrice = p;
+            }
+        }
+
         // Fetch API response
-        const data = await fetchPipelineData(query, currentImageBase64);
+        const data = await fetchPipelineData(query, currentImageBase64, manualPrice);
 
         // Animate remaining steps
         await delay(500);
@@ -578,6 +609,7 @@ function resetHeroCard() {
 
 function resetSearch() {
     searchInput.value = "";
+    if (manualPriceInput) manualPriceInput.value = "";
     removeImage();
     procedureSection.style.display = "none";
     analysisSection.style.display = "none";
@@ -1146,7 +1178,11 @@ function isDirectProductUrl(url) {
 }
 
 function getStoreSearchUrl(storeName, cleanTerm) {
-    const encoded = encodeURIComponent(cleanTerm);
+    const simplified = (cleanTerm || '')
+        .replace(/[^a-zA-Z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const encoded = encodeURIComponent(simplified || cleanTerm);
     const store = (storeName || '').toLowerCase();
 
     if (store.includes('amazon')) {
@@ -1160,11 +1196,7 @@ function getStoreSearchUrl(storeName, cleanTerm) {
     } else if (store.includes('vijay')) {
         return `https://www.vijaysales.com/search?q=${encoded}`;
     } else if (store.includes('myntra')) {
-        const slug = cleanTerm.toLowerCase()
-            .replace(/[^a-z0-9\s-]/g, '')
-            .trim()
-            .replace(/\s+/g, '-');
-        return `https://www.myntra.com/${slug}`;
+        return `https://www.myntra.com/search?rawQuery=${encoded}`;
     } else if (store.includes('ajio')) {
         return `https://www.ajio.com/search/?text=${encoded}`;
     } else if (store.includes('tata')) {
@@ -1179,7 +1211,7 @@ function getStoreSearchUrl(storeName, cleanTerm) {
     return `https://www.google.com/search?q=${encoded}`;
 }
 
-function generateMockPipelineData(query) {
+function generateMockPipelineData(query, manualPrice = null) {
     const isUrl = query.startsWith("http://") || query.startsWith("https://") || query.startsWith("www.");
     let productName = query.trim();
 
@@ -1200,6 +1232,9 @@ function generateMockPipelineData(query) {
         }
     }
 
+    if (!isUrl) {
+        productName = productName.replace(/(?:rs\.?|inr|₹|price\s*:?)\s*\d{2,7}/gi, '').trim();
+    }
     productName = productName.replace(/\s+/g, " ").trim();
     if (productName.length < 4 || isInvalidTitle(productName)) productName = "Featured Product";
 
@@ -1218,9 +1253,10 @@ function generateMockPipelineData(query) {
     const isElectronics = !isBeauty && (
         [
             "realme", "redmi", "xiaomi", "oneplus", "oppo", "poco", "iqoo", "motorola", "moto", "nokia", "apple", "iphone", "samsung", "pixel", "galaxy",
-            "5g", "4g", "smartphone", "laptop", "macbook", "ipad", "tablet", "smartwatch", "tv", "earbuds", "headphone", "audio", 
+            "sony", "bose", "jbl", "boat", "noise", "boult", "zebronics", "canon", "nikon", "playstation", "xbox", "dell", "hp", "lenovo", "asus", "acer",
+            "5g", "4g", "smartphone", "laptop", "macbook", "ipad", "tablet", "smartwatch", "tv", "earbuds", "headphone", "audio", "airpods", "xm5", "xm4",
             "croma", "dimensity", "snapdragon", "intel", "amd", "ryzen", "rtx", "headset", "bluetooth", "charger", "soundbar", "speaker"
-        ].some(k => new RegExp(`\\b${k}\\b`, 'i').test(text)) || (/\bvivo\b/i.test(text) && !/in[- ]vivo/i.test(text))
+        ].some(k => new RegExp(`\\b${k}\\b`, 'i').test(text)) || (/\\bvivo\\b/i.test(text) && !/in[- ]vivo/i.test(text))
     );
 
     const isFashion = !isBeauty && ["kurta", "kurti", "saree", "suit", "anarkali", "salwar", "lehenga", "ethnic", "dress", "shirt", "jeans", "t-shirt", "jacket", "top", "palazzo", "legging", "clothing", "apparel", "fashion", "dupatta"].some(k => text.includes(k));
@@ -1230,85 +1266,178 @@ function generateMockPipelineData(query) {
     else if (isElectronics) category = "Electronics";
     else if (isFashion) category = "Fashion";
 
-    let basePrice = 0;
+    let basePrice = (manualPrice && manualPrice >= 49 && manualPrice <= 500000) ? manualPrice : 0;
     let originalPrice = 0;
 
-    // Explicit price match ONLY if formatted with currency symbols (e.g., "₹799" or "Rs 699")
-    const explicitMatch = text.match(/(?:rs\.?|inr|₹|price)\s*:?\s*(\d{2,6})/i);
-    if (explicitMatch) {
-        const val = parseInt(explicitMatch[1], 10);
-        if (val >= 49 && val <= 250000) {
-            basePrice = val;
+    // Explicit price match ONLY if formatted with currency symbols (e.g., '₹799' or 'Rs 699')
+    if (!basePrice) {
+        const explicitMatch = text.match(/(?:rs\.?|inr|₹|price\s*:?)\s*(\d{2,7})/i);
+        if (explicitMatch) {
+            const val = parseInt(explicitMatch[1], 10);
+            if (val >= 49 && val <= 350000) {
+                basePrice = val;
+            }
         }
     }
 
     if (!basePrice) {
-        if (text.includes("lip liner") || text.includes("lipliner") || text.includes("kajal")) {
-            basePrice = 69;
-            originalPrice = 69;
-        } else if (text.includes("lipstick") || text.includes("lip gloss") || text.includes("lip balm")) {
-            basePrice = 149;
-            originalPrice = 199;
-        } else if (text.includes("serum") || text.includes("sunscreen") || text.includes("moisturizer")) {
-            basePrice = 349;
-            originalPrice = 449;
-        } else if (text.includes("iphone 16 pro max") || text.includes("iphone 15 pro max")) {
+        if (text.includes('iphone 16 pro max') || text.includes('iphone 15 pro max')) {
             basePrice = 144900;
-            originalPrice = 159900;
-        } else if (text.includes("iphone 16 pro") || text.includes("iphone 15 pro") || text.includes("s24 ultra") || text.includes("macbook pro")) {
+        } else if (text.includes('iphone 16 pro') || text.includes('iphone 15 pro')) {
             basePrice = 119900;
-            originalPrice = 134900;
-        } else if (text.includes("iphone 16 plus") || text.includes("iphone-16-plus")) {
+        } else if (text.includes('iphone 16 plus') || text.includes('iphone-16-plus')) {
             basePrice = 89900;
-            originalPrice = 99900;
-        } else if (text.includes("iphone 16") || text.includes("iphone-16")) {
+        } else if (text.includes('iphone 16') || text.includes('iphone-16')) {
             basePrice = 76999;
-            originalPrice = 89900;
-        } else if (text.includes("iphone 15") || text.includes("iphone-15")) {
+        } else if (text.includes('iphone 15 plus') || text.includes('15 plus')) {
+            basePrice = 76900;
+        } else if (text.includes('iphone 15') || text.includes('iphone-15')) {
             basePrice = 58999;
-            originalPrice = 69900;
-        } else if (text.includes("iphone 14")) {
+        } else if (text.includes('iphone 14')) {
             basePrice = 52999;
-            originalPrice = 69900;
-        } else if (text.includes("iphone 13")) {
+        } else if (text.includes('iphone 13')) {
             basePrice = 44999;
-            originalPrice = 59900;
-        } else if (text.includes("iphone") || text.includes("gaming laptop") || text.includes("rtx 4060") || text.includes("rtx 3050")) {
+        } else if (text.includes('iphone')) {
             basePrice = 54990;
-            originalPrice = 69900;
-        } else if (text.includes("laptop") || text.includes("notebook") || text.includes("thinkpad") || text.includes("pavilion") || text.includes("vivobook")) {
-            basePrice = 42990;
-        } else if (text.includes("ipad") || text.includes("tablet") || text.includes("oneplus 12") || text.includes("galaxy tab")) {
-            basePrice = 28990;
-        } else if (text.includes("realme") || text.includes("redmi") || text.includes("oneplus") || text.includes("5g")) {
+        } else if (text.includes('s24 ultra') || text.includes('s23 ultra') || text.includes('galaxy s24 ultra') || text.includes('galaxy s23 ultra')) {
+            basePrice = 119999;
+        } else if (text.includes('s24 plus') || text.includes('s23 plus') || text.includes('galaxy s24+') || text.includes('galaxy s23+')) {
+            basePrice = 84999;
+        } else if ((text.includes('s24') || text.includes('s23') || text.includes('galaxy s24') || text.includes('galaxy s23')) && !text.includes('ultra')) {
+            basePrice = 64999;
+        } else if (text.includes('s24 fe') || text.includes('s23 fe')) {
+            basePrice = 39999;
+        } else if (text.includes('z fold') || text.includes('galaxy fold')) {
+            basePrice = 149999;
+        } else if (text.includes('z flip') || text.includes('galaxy flip')) {
+            basePrice = 79999;
+        } else if (text.includes('galaxy a55') || text.includes('galaxy a54')) {
+            basePrice = 34999;
+        } else if (text.includes('galaxy a35') || text.includes('galaxy a34')) {
+            basePrice = 24999;
+        } else if (text.includes('galaxy m35') || text.includes('galaxy m34') || text.includes('galaxy f54')) {
+            basePrice = 16999;
+        } else if (text.includes('samsung') && (text.includes('5g') || text.includes('galaxy') || text.includes('phone'))) {
+            basePrice = 24999;
+        } else if ((text.includes('oneplus 12') || text.includes('oneplus 11')) && !text.includes('12r') && !text.includes('11r')) {
+            basePrice = 59999;
+        } else if (text.includes('oneplus 12r') || text.includes('oneplus 11r') || text.includes('12r') || text.includes('11r')) {
+            basePrice = 39999;
+        } else if (text.includes('oneplus nord 4') || text.includes('oneplus nord 3')) {
             basePrice = 28999;
-        } else if (text.includes("sony wh") || text.includes("bose") || text.includes("airpods pro") || text.includes("apple watch")) {
-            basePrice = 24990;
-        } else if (text.includes("smart tv") || text.includes("55 inch") || text.includes("43 inch") || text.includes("bravia") || text.includes("oled")) {
-            basePrice = 32990;
-        } else if (text.includes("phone") || text.includes("mobile") || text.includes("smartphone")) {
+        } else if (text.includes('nord ce 4') || text.includes('nord ce 3') || text.includes('oneplus nord ce')) {
+            basePrice = 19999;
+        } else if (text.includes('pixel 9 pro') || text.includes('pixel 8 pro')) {
+            basePrice = 106999;
+        } else if (text.includes('pixel 9') || text.includes('pixel 8')) {
+            basePrice = 69999;
+        } else if (text.includes('pixel 8a') || text.includes('pixel 7a')) {
+            basePrice = 42999;
+        } else if (text.includes('iqoo 12') || text.includes('iqoo 11')) {
+            basePrice = 44999;
+        } else if (text.includes('poco f6') || text.includes('poco x6 pro') || text.includes('x6 pro')) {
+            basePrice = 23999;
+        } else if (text.includes('poco x6') || text.includes('poco m6')) {
+            basePrice = 13999;
+        } else if (text.includes('realme 13 pro') || text.includes('realme 12 pro') || text.includes('realme gt')) {
+            basePrice = 22999;
+        } else if (text.includes('realme p1') || text.includes('realme p2') || text.includes('realme p4') || text.includes('realme 12')) {
+            basePrice = 16999;
+        } else if (text.includes('redmi note 13 pro') || text.includes('redmi note 12 pro')) {
+            basePrice = 21999;
+        } else if (text.includes('redmi note 13') || text.includes('redmi note 12')) {
             basePrice = 14999;
-        } else if (text.includes("smartwatch") || text.includes("galaxy watch") || text.includes("fire-boltt") || text.includes("noise watch") || text.includes("amazfit")) {
-            basePrice = 2499;
-        } else if (text.includes("earbuds") || text.includes("tws") || text.includes("airpods") || text.includes("boat") || text.includes("headphone") || text.includes("speaker")) {
+        } else if (text.includes('redmi 13c') || text.includes('redmi 12')) {
+            basePrice = 9999;
+        } else if (text.includes('moto edge')) {
+            basePrice = 26999;
+        } else if (text.includes('vivo v40') || text.includes('vivo v30')) {
+            basePrice = 31999;
+        } else if (text.includes('phone') || text.includes('mobile') || text.includes('smartphone') || text.includes('5g')) {
+            basePrice = 17999;
+        } else if (text.includes('macbook pro')) {
+            basePrice = 159900;
+        } else if (text.includes('macbook air') || text.includes('m2') || text.includes('m3')) {
+            basePrice = 84990;
+        } else if (text.includes('rtx 4070') || text.includes('rtx 4060')) {
+            basePrice = 79990;
+        } else if (text.includes('rtx 3050') || text.includes('gaming laptop')) {
+            basePrice = 58990;
+        } else if (text.includes('laptop') || text.includes('notebook')) {
+            basePrice = 44990;
+        } else if (text.includes('ipad pro')) {
+            basePrice = 89900;
+        } else if (text.includes('ipad air')) {
+            basePrice = 56900;
+        } else if (text.includes('ipad 10') || text.includes('ipad')) {
+            basePrice = 32900;
+        } else if (text.includes('galaxy tab') || text.includes('tablet')) {
+            basePrice = 24990;
+        } else if (text.includes('sony wh') || text.includes('1000xm5') || text.includes('1000xm4')) {
+            basePrice = 26990;
+        } else if (text.includes('bose')) {
+            basePrice = 25990;
+        } else if (text.includes('airpods pro')) {
+            basePrice = 21900;
+        } else if (text.includes('airpods')) {
+            basePrice = 12900;
+        } else if (text.includes('airdopes 141') || text.includes('airdopes-141')) {
+            basePrice = 1199;
+        } else if (text.includes('airdopes') || text.includes('boat airdopes')) {
+            basePrice = 1299;
+        } else if (text.includes('earbuds') || text.includes('tws') || text.includes('bluetooth headset')) {
             basePrice = 1499;
-        } else if (text.includes("safari") || text.includes("backpack") || text.includes("american tourister") || text.includes("skybags") || text.includes("bag") || text.includes("trolley") || text.includes("luggage")) {
+        } else if (text.includes('headphones') || text.includes('headset')) {
+            basePrice = 2199;
+        } else if (text.includes('soundbar') || text.includes('speaker') || text.includes('jbl')) {
+            basePrice = 4999;
+        } else if (text.includes('apple watch ultra')) {
+            basePrice = 82900;
+        } else if (text.includes('apple watch')) {
+            basePrice = 24900;
+        } else if (text.includes('galaxy watch')) {
+            basePrice = 19900;
+        } else if (text.includes('pulse 2 max') || text.includes('colorfit') || text.includes('smartwatch')) {
+            basePrice = 1599;
+        } else if (text.includes('oled tv') || text.includes('65 inch') || text.includes('bravia')) {
+            basePrice = 69990;
+        } else if (text.includes('55 inch') || text.includes('50 inch')) {
+            basePrice = 38990;
+        } else if (text.includes('43 inch')) {
+            basePrice = 24990;
+        } else if (text.includes('32 inch') || text.includes('smart tv') || text.includes('tv')) {
+            basePrice = 13990;
+        } else if (text.includes('refrigerator') || text.includes('fridge')) {
+            basePrice = 22990;
+        } else if (text.includes('washing machine')) {
+            basePrice = 18990;
+        } else if (text.includes('air conditioner') || text.includes('ac 1.5')) {
+            basePrice = 34990;
+        } else if (text.includes('air jordan') || text.includes('yeezy')) {
+            basePrice = 7995;
+        } else if (text.includes('nike') || text.includes('adidas') || text.includes('puma') || text.includes('sneaker') || text.includes('shoes')) {
+            basePrice = 3499;
+        } else if (text.includes('safari') || text.includes('backpack') || text.includes('trolley') || text.includes('bag')) {
+            basePrice = 1299;
+        } else if (text.includes('kurta') || text.includes('kurti') || text.includes('saree') || text.includes('ethnic') || text.includes('dress')) {
+            basePrice = 699;
+        } else if (text.includes('jeans') || text.includes('jacket') || text.includes('shirt') || text.includes('t-shirt') || text.includes('hoodie')) {
             basePrice = 799;
-        } else if (text.includes("shoe") || text.includes("sneaker") || text.includes("nike") || text.includes("adidas") || text.includes("puma")) {
-            basePrice = 2499;
-        } else if (text.includes("kurta") || text.includes("kurti") || text.includes("saree") || text.includes("ethnic")) {
-            basePrice = 239;
-            originalPrice = 1599;
-        } else if (text.includes("shirt") || text.includes("jeans") || text.includes("t-shirt") || text.includes("jacket") || text.includes("dress")) {
-            basePrice = 499;
-            originalPrice = 1299;
+        } else if (text.includes('lip liner') || text.includes('lipliner') || text.includes('kajal')) {
+            basePrice = 99;
+        } else if (text.includes('lipstick') || text.includes('lip balm')) {
+            basePrice = 249;
+        } else if (text.includes('serum') || text.includes('sunscreen') || text.includes('moisturizer')) {
+            basePrice = 399;
         } else {
-            let hash = 0;
-            for (let i = 0; i < text.length; i++) hash += text.charCodeAt(i);
-            basePrice = 299 + ((hash * 23) % 400);
+            if (category === 'Electronics') basePrice = 14999;
+            else if (category === 'Fashion') basePrice = 799;
+            else if (category === 'Beauty & Personal Care') basePrice = 299;
+            else if (category === 'Footwear') basePrice = 2499;
+            else if (category === 'Bags & Luggage') basePrice = 1299;
+            else basePrice = 999;
         }
     }
-
     if (!originalPrice || originalPrice <= basePrice) {
         if (text.includes("kurta") || text.includes("kurti") || text.includes("saree")) {
             originalPrice = Math.max(899, Math.round(basePrice * 2.5));

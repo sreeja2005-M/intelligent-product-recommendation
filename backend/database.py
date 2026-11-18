@@ -7,41 +7,51 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 load_dotenv()
 
 raw_database_url = os.getenv("DATABASE_URL")
+engine = None
+SessionLocal = None
+Base = declarative_base()
 
-if raw_database_url:
-    # Handle postgresql:// schema name for SQLAlchemy compatibility
-    if raw_database_url.startswith("postgres://"):
-        raw_database_url = raw_database_url.replace("postgres://", "postgresql://", 1)
-    DATABASE_URL = raw_database_url
-else:
+def init_db():
+    global engine, SessionLocal
+    if raw_database_url:
+        target_url = raw_database_url
+        if target_url.startswith("postgres://"):
+            target_url = target_url.replace("postgres://", "postgresql://", 1)
+        try:
+            temp_engine = create_engine(target_url, echo=False)
+            with temp_engine.connect() as conn:
+                pass
+            engine = temp_engine
+            SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+            return
+        except Exception:
+            pass
+
     DB_HOST = os.getenv("DB_HOST", "localhost")
     DB_PORT = os.getenv("DB_PORT", "3306")
     DB_USER = os.getenv("DB_USER", "root")
     DB_PASSWORD = os.getenv("DB_PASSWORD", "")
     DB_NAME = os.getenv("DB_NAME", "intelligent_product_recommendation")
-    
+
     if DB_PASSWORD:
-        DATABASE_URL = (
+        mysql_url = (
             f"mysql+pymysql://{DB_USER}:{quote_plus(DB_PASSWORD)}"
             f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
         )
-    else:
-        # Fallback to local SQLite database if no MySQL password provided
-        DATABASE_URL = "sqlite:///./intelligent_recommendation.db"
+        try:
+            temp_engine = create_engine(mysql_url, echo=False)
+            with temp_engine.connect() as conn:
+                pass
+            engine = temp_engine
+            SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+            return
+        except Exception:
+            # Fallback gracefully to SQLite if MySQL is unreachable or not started
+            pass
 
-# Configure connect args for SQLite if used
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+    # Resilient local SQLite fallback
+    sqlite_url = "sqlite:///./intelligent_recommendation.db"
+    engine = create_engine(sqlite_url, connect_args={"check_same_thread": False}, echo=False)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args=connect_args,
-    echo=False
-)
-
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
-
-Base = declarative_base()
+init_db()

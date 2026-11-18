@@ -2098,6 +2098,59 @@ footer > p {
 
 /* ================= PHOTO SEARCH & AI VISION STYLES ================= */
 
+.price-input-wrapper {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(139, 92, 246, 0.35);
+    border-radius: 9px;
+    padding: 0 10px;
+    margin-right: 8px;
+    height: 38px;
+    transition: all 0.25s ease;
+}
+
+.price-input-wrapper:focus-within {
+    border-color: #a78bfa;
+    box-shadow: 0 0 14px rgba(139, 92, 246, 0.35);
+    background: rgba(255, 255, 255, 0.09);
+}
+
+.price-prefix {
+    color: #a78bfa;
+    font-size: 13px;
+    font-weight: 700;
+    margin-right: 4px;
+    user-select: none;
+}
+
+.price-input-wrapper input {
+    width: 70px !important;
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    color: #ffffff !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    padding: 0 !important;
+}
+
+.price-input-wrapper input::placeholder {
+    color: #7b88a3 !important;
+    font-size: 11px !important;
+    font-weight: 400 !important;
+}
+
+.price-input-wrapper input::-webkit-outer-spin-button,
+.price-input-wrapper input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.price-input-wrapper input[type=number] {
+    -moz-appearance: textfield;
+}
+
 .upload-image-btn {
     display: inline-flex;
     align-items: center;

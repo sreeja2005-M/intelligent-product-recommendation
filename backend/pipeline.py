@@ -24,7 +24,8 @@ def detect_product_category(product_name: str, query: str) -> str:
 
     electronics_keywords = [
         "realme", "redmi", "xiaomi", "oneplus", "oppo", "poco", "iqoo", "motorola", "moto", "nokia", "apple", "iphone", "samsung", "pixel", "galaxy",
-        "5g", "4g", "smartphone", "laptop", "macbook", "ipad", "tablet", "smartwatch", "tv", "earbuds", "headphone", "audio", 
+        "sony", "bose", "jbl", "boat", "noise", "boult", "zebronics", "canon", "nikon", "playstation", "xbox", "dell", "hp", "lenovo", "asus", "acer",
+        "5g", "4g", "smartphone", "laptop", "macbook", "ipad", "tablet", "smartwatch", "tv", "earbuds", "headphone", "audio", "airpods", "xm5", "xm4",
         "croma", "dimensity", "snapdragon", "intel", "amd", "ryzen", "rtx", "headset", "bluetooth", "charger", "soundbar", "speaker"
     ]
     if any(re.search(rf"\b{re.escape(k)}\b", text) for k in electronics_keywords) or (re.search(r"\bvivo\b", text) and not re.search(r"in[- ]vivo", text)):
@@ -308,7 +309,9 @@ def is_invalid_title(title: Optional[str]) -> bool:
 
 
 def get_store_search_url(store_name: str, clean_term: str) -> str:
-    encoded = quote_plus(clean_term)
+    simplified = re.sub(r'[^a-zA-Z0-9\s]', ' ', clean_term or "")
+    simplified = re.sub(r'\s+', ' ', simplified).strip()
+    encoded = quote_plus(simplified or clean_term)
     store = (store_name or "").lower()
 
     if "amazon" in store:
@@ -322,8 +325,7 @@ def get_store_search_url(store_name: str, clean_term: str) -> str:
     elif "vijay" in store:
         return f"https://www.vijaysales.com/search?q={encoded}"
     elif "myntra" in store:
-        slug = re.sub(r'[^a-zA-Z0-9\s-]', '', clean_term).strip().replace(' ', '-')
-        return f"https://www.myntra.com/{slug.lower()}"
+        return f"https://www.myntra.com/search?rawQuery={encoded}"
     elif "ajio" in store:
         return f"https://www.ajio.com/search/?text={encoded}"
     elif "tata" in store:
@@ -338,58 +340,216 @@ def get_store_search_url(store_name: str, clean_term: str) -> str:
 
 
 
+
 def estimate_realistic_base_price(product_name: str, query: str) -> float:
     text = (product_name + " " + query).lower()
     
-    explicit_match = re.search(r'(?:rs\.?|inr|₹)?\s*(\d{2,6})', text, re.IGNORECASE)
+    # Explicit price match with currency symbol or price prefix ONLY
+    explicit_match = re.search(r'(?:rs\.?|inr|₹|price\s*:?)\s*(\d{2,7})', text, re.IGNORECASE)
     if explicit_match:
         val = float(explicit_match.group(1))
-        if 49 <= val <= 250000:
+        if 49 <= val <= 350000:
             return val
 
-    if any(k in text for k in ["lip liner", "lipliner", "kajal"]):
-        return 69.0
-    elif any(k in text for k in ["lipstick", "lip gloss", "lip balm"]):
-        return 149.0
-    elif any(k in text for k in ["serum", "sunscreen", "moisturizer"]):
-        return 349.0
-    elif any(k in text for k in ["iphone 16 pro max", "iphone 15 pro max"]):
+    # High-precision smartphones
+    if any(k in text for k in ["iphone 16 pro max", "iphone 15 pro max", "16 pro max", "15 pro max"]):
         return 144900.0
-    elif any(k in text for k in ["iphone 16 pro", "iphone 15 pro", "s24 ultra", "macbook pro"]):
+    elif any(k in text for k in ["iphone 16 pro", "iphone 15 pro", "16 pro", "15 pro"]):
         return 119900.0
+    elif any(k in text for k in ["iphone 16 plus", "16 plus"]):
+        return 89900.0
     elif any(k in text for k in ["iphone 16", "iphone-16"]):
         return 76999.0
+    elif any(k in text for k in ["iphone 15 plus", "15 plus"]):
+        return 76900.0
     elif any(k in text for k in ["iphone 15", "iphone-15"]):
-        return 64999.0
-    elif any(k in text for k in ["iphone 14", "iphone 13"]):
+        return 58999.0
+    elif any(k in text for k in ["iphone 14 plus", "14 plus"]):
+        return 59999.0
+    elif any(k in text for k in ["iphone 14", "iphone-14"]):
         return 52999.0
-    elif any(k in text for k in ["iphone", "gaming laptop", "rtx 4060", "rtx 3050"]):
+    elif any(k in text for k in ["iphone 13", "iphone-13"]):
+        return 44999.0
+    elif "iphone" in text:
         return 54990.0
-    elif any(k in text for k in ["laptop", "notebook", "thinkpad", "pavilion", "vivobook"]):
-        return 42990.0
-    elif any(k in text for k in ["ipad", "tablet", "oneplus 12", "galaxy tab"]):
-        return 28990.0
-    elif any(k in text for k in ["sony wh", "bose", "airpods pro", "apple watch"]):
-        return 24990.0
-    elif any(k in text for k in ["smart tv", "55 inch", "43 inch", "bravia", "oled"]):
-        return 32990.0
-    elif any(k in text for k in ["phone", "mobile", "redmi", "realme", "poco", "iqoo", "smartphone"]):
+
+    # Samsung flagships & foldables
+    if any(k in text for k in ["s24 ultra", "s23 ultra", "galaxy s24 ultra", "galaxy s23 ultra"]):
+        return 119999.0
+    elif any(k in text for k in ["s24 plus", "s23 plus", "galaxy s24+", "galaxy s23+"]):
+        return 84999.0
+    elif any(k in text for k in ["s24", "s23", "galaxy s24", "galaxy s23"]) and "ultra" not in text:
+        return 64999.0
+    elif any(k in text for k in ["s24 fe", "s23 fe", "s21 fe"]):
+        return 39999.0
+    elif any(k in text for k in ["z fold", "galaxy fold"]):
+        return 149999.0
+    elif any(k in text for k in ["z flip", "galaxy flip"]):
+        return 79999.0
+    elif any(k in text for k in ["galaxy a55", "galaxy a54", "samsung a55"]):
+        return 34999.0
+    elif any(k in text for k in ["galaxy a35", "galaxy a34", "samsung a35"]):
+        return 24999.0
+    elif any(k in text for k in ["galaxy m35", "galaxy m34", "galaxy f54", "samsung m34"]):
+        return 16999.0
+    elif "samsung" in text and any(k in text for k in ["5g", "galaxy", "phone"]):
+        return 24999.0
+
+    # OnePlus & Pixel
+    if any(k in text for k in ["oneplus 12", "oneplus 11"]) and "12r" not in text and "11r" not in text:
+        return 59999.0
+    elif any(k in text for k in ["oneplus 12r", "oneplus 11r", "12r", "11r"]):
+        return 39999.0
+    elif any(k in text for k in ["oneplus nord 4", "oneplus nord 3"]):
+        return 28999.0
+    elif any(k in text for k in ["nord ce 4", "nord ce 3", "oneplus nord ce"]):
+        return 19999.0
+    elif any(k in text for k in ["pixel 9 pro", "pixel 8 pro"]):
+        return 106999.0
+    elif any(k in text for k in ["pixel 9", "pixel 8"]):
+        return 69999.0
+    elif any(k in text for k in ["pixel 8a", "pixel 7a"]):
+        return 42999.0
+
+    # Other popular phones (Poco, Realme, Redmi, iQOO, Vivo, Moto)
+    if any(k in text for k in ["iqoo 12", "iqoo 11", "iqoo neo 9"]):
+        return 44999.0
+    elif any(k in text for k in ["iqoo z9", "iqoo z7"]):
+        return 19999.0
+    elif any(k in text for k in ["poco f6", "poco x6 pro", "x6 pro"]):
+        return 23999.0
+    elif any(k in text for k in ["poco x6", "poco m6"]):
+        return 13999.0
+    elif any(k in text for k in ["realme 13 pro", "realme 12 pro", "realme gt"]):
+        return 22999.0
+    elif any(k in text for k in ["realme p1", "realme p2", "realme p4", "realme 12"]):
+        return 16999.0
+    elif any(k in text for k in ["redmi note 13 pro", "redmi note 12 pro"]):
+        return 21999.0
+    elif any(k in text for k in ["redmi note 13", "redmi note 12"]):
         return 14999.0
-    elif any(k in text for k in ["smartwatch", "galaxy watch", "fire-boltt", "noise watch", "amazfit"]):
-        return 2499.0
-    elif any(k in text for k in ["earbuds", "tws", "airpods", "boat", "headphone", "earphone", "speaker"]):
-        return 1499.0
-    elif any(k in text for k in ["safari", "backpack", "american tourister", "skybags", "bag", "trolley", "luggage"]):
+    elif any(k in text for k in ["redmi 13c", "redmi 12"]):
+        return 9999.0
+    elif any(k in text for k in ["moto edge", "motorola edge"]):
+        return 26999.0
+    elif any(k in text for k in ["moto g", "motorola g"]):
+        return 13999.0
+    elif any(k in text for k in ["vivo v40", "vivo v30", "vivo v29"]):
+        return 31999.0
+    elif any(k in text for k in ["vivo t3", "vivo t2", "vivo y"]):
+        return 17999.0
+    elif any(k in text for k in ["phone", "mobile", "smartphone", "5g"]):
+        return 17999.0
+
+    # Laptops & Computing
+    if any(k in text for k in ["macbook pro"]):
+        return 159900.0
+    elif any(k in text for k in ["macbook air", "m2", "m3"]):
+        return 84990.0
+    elif any(k in text for k in ["rtx 4070", "rtx 4060", "rog zephyrus", "legion 5", "predator"]):
+        return 79990.0
+    elif any(k in text for k in ["rtx 3050", "rtx 2050", "gaming laptop", "tuf gaming", "victus", "nitro"]):
+        return 58990.0
+    elif any(k in text for k in ["thinkpad", "dell xps", "zenbook"]):
+        return 74990.0
+    elif any(k in text for k in ["pavilion", "inspiron", "ideapad", "vivobook"]):
+        return 46990.0
+    elif any(k in text for k in ["laptop", "notebook"]):
+        return 44990.0
+
+    # Tablets
+    if any(k in text for k in ["ipad pro"]):
+        return 89900.0
+    elif any(k in text for k in ["ipad air"]):
+        return 56900.0
+    elif any(k in text for k in ["ipad 10", "ipad 9", "ipad"]):
+        return 32900.0
+    elif any(k in text for k in ["galaxy tab", "tablet", "lenovo tab", "pad"]):
+        return 24990.0
+
+    # Audio & Sound
+    if any(k in text for k in ["sony wh", "1000xm5", "1000xm4"]):
+        return 26990.0
+    elif any(k in text for k in ["bose quietcomfort", "bose qc"]):
+        return 25990.0
+    elif any(k in text for k in ["airpods pro"]):
+        return 21900.0
+    elif any(k in text for k in ["airpods"]):
+        return 12900.0
+    elif any(k in text for k in ["airdopes 141", "airdopes-141"]):
         return 1199.0
-    elif any(k in text for k in ["shoe", "sneaker", "nike", "adidas", "puma"]):
-        return 2999.0
-    elif any(k in text for k in ["kurta", "kurti", "saree", "suit", "anarkali", "salwar", "lehenga", "ethnic"]):
+    elif any(k in text for k in ["airdopes", "boat airdopes"]):
+        return 1299.0
+    elif any(k in text for k in ["earbuds", "tws", "earphones", "bluetooth headset"]):
+        return 1499.0
+    elif any(k in text for k in ["headphones", "headset"]):
+        return 2199.0
+    elif any(k in text for k in ["soundbar", "speaker", "jbl", "home theatre"]):
+        return 4999.0
+
+    # Wearables & Smartwatches
+    if any(k in text for k in ["apple watch ultra"]):
+        return 82900.0
+    elif any(k in text for k in ["apple watch series", "apple watch 9", "apple watch 10"]):
+        return 39900.0
+    elif any(k in text for k in ["apple watch se", "apple watch"]):
+        return 24900.0
+    elif any(k in text for k in ["galaxy watch"]):
+        return 19900.0
+    elif any(k in text for k in ["pulse 2 max", "colorfit", "noise watch", "fire-boltt", "boat wave", "smartwatch"]):
+        return 1599.0
+
+    # TVs & Home Appliances
+    if any(k in text for k in ["oled tv", "qled", "65 inch", "bravia"]):
+        return 69990.0
+    elif any(k in text for k in ["55 inch", "50 inch"]):
+        return 38990.0
+    elif any(k in text for k in ["43 inch"]):
+        return 24990.0
+    elif any(k in text for k in ["32 inch", "smart tv", "tv"]):
+        return 13990.0
+    elif any(k in text for k in ["refrigerator", "fridge"]):
+        return 22990.0
+    elif any(k in text for k in ["washing machine"]):
+        return 18990.0
+    elif any(k in text for k in ["air conditioner", "ac 1.5"]):
+        return 34990.0
+
+    # Footwear & Fashion
+    if any(k in text for k in ["air jordan", "yeezy", "dunk"]):
+        return 7995.0
+    elif any(k in text for k in ["nike", "adidas", "puma", "asics", "sneaker", "shoes"]):
+        return 3499.0
+    elif any(k in text for k in ["safari", "american tourister", "skybags", "trolley", "backpack", "luggage", "bag"]):
+        return 1299.0
+    elif any(k in text for k in ["kurta", "kurti", "saree", "ethnic", "dress", "anarkali"]):
+        return 699.0
+    elif any(k in text for k in ["jeans", "jacket", "shirt", "t-shirt", "tshirt", "hoodie"]):
+        return 799.0
+
+    # Cosmetics & Skincare
+    if any(k in text for k in ["lip liner", "lipliner", "kajal", "eyeliner"]):
+        return 99.0
+    elif any(k in text for k in ["lipstick", "lip gloss", "lip balm"]):
         return 249.0
-    elif any(k in text for k in ["shirt", "jeans", "t-shirt", "jacket", "dress", "top"]):
+    elif any(k in text for k in ["foundation", "concealer", "compact", "primer"]):
         return 499.0
-    else:
-        hash_val = sum(ord(c) for c in text)
-        return float(399 + ((hash_val * 31) % 500))
+    elif any(k in text for k in ["serum", "sunscreen", "moisturizer", "facewash"]):
+        return 399.0
+
+    # Fallback to category defaults (realistic, no random hashes)
+    cat = detect_product_category(product_name, query)
+    if cat == "Electronics":
+        return 14999.0
+    elif cat == "Fashion":
+        return 799.0
+    elif cat == "Beauty & Personal Care":
+        return 299.0
+    elif cat == "Footwear":
+        return 2499.0
+    elif cat == "Bags & Luggage":
+        return 1299.0
+    return 999.0
 
 
 from backend.database import SessionLocal
@@ -741,7 +901,7 @@ VERIFIED_BENCHMARKS = [
 ]
 
 
-def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
+def run_full_recommendation_pipeline(query: str, db: Session, manual_price: Optional[float] = None) -> Dict[str, Any]:
     """
     Executes the complete 7-step procedure:
     Step 1: User Input Processing
@@ -788,7 +948,9 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         else:
             product_name = scraped_name
     else:
-        product_name = scraped_data.product_name if scraped_data and scraped_data.product_name and not is_invalid_title(scraped_data.product_name) else query.title()
+        raw_name = scraped_data.product_name if scraped_data and scraped_data.product_name and not is_invalid_title(scraped_data.product_name) else query.title()
+        cleaned_name = re.sub(r'(?:rs\.?|inr|₹|price\s*:?)\s*\d{2,7}', '', raw_name, flags=re.IGNORECASE).strip()
+        product_name = re.sub(r'\s+', ' ', cleaned_name).strip() or raw_name
 
     if not product_name or is_invalid_title(product_name):
         product_name = "Smart Buy Product"
@@ -818,7 +980,9 @@ def run_full_recommendation_pipeline(query: str, db: Session) -> Dict[str, Any]:
         db.commit()
 
     # Establish baseline price with category-aware price estimator fallback
-    if scraped_data and scraped_data.current_price and float(scraped_data.current_price) > 0:
+    if manual_price and float(manual_price) > 0:
+        base_price = float(manual_price)
+    elif scraped_data and scraped_data.current_price and float(scraped_data.current_price) > 0:
         base_price = float(scraped_data.current_price)
     else:
         base_price = estimate_realistic_base_price(product_name, query)

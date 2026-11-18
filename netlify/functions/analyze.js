@@ -418,7 +418,11 @@ function isDirectProductUrl(url) {
 }
 
 function getStoreSearchUrl(storeName, cleanTerm) {
-    const encoded = encodeURIComponent(cleanTerm);
+    const simplified = (cleanTerm || '')
+        .replace(/[^a-zA-Z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const encoded = encodeURIComponent(simplified || cleanTerm);
     const store = (storeName || '').toLowerCase();
 
     if (store.includes('amazon')) {
@@ -432,11 +436,7 @@ function getStoreSearchUrl(storeName, cleanTerm) {
     } else if (store.includes('vijay')) {
         return `https://www.vijaysales.com/search?q=${encoded}`;
     } else if (store.includes('myntra')) {
-        const slug = cleanTerm.toLowerCase()
-            .replace(/[^a-z0-9\s-]/g, '')
-            .trim()
-            .replace(/\s+/g, '-');
-        return `https://www.myntra.com/${slug}`;
+        return `https://www.myntra.com/search?rawQuery=${encoded}`;
     } else if (store.includes('ajio')) {
         return `https://www.ajio.com/search/?text=${encoded}`;
     } else if (store.includes('tata')) {
@@ -636,6 +636,32 @@ function extractProductInfo(html, url) {
     if (!currentPrice) {
         const amazonOffscreen = html.match(/class="a-offscreen">\s*₹\s*([0-9,]+(?:\.\d+)?)/i);
         if (amazonOffscreen) currentPrice = parseFloat(amazonOffscreen[1].replace(/,/g, ''));
+    }
+
+    // Modern Flipkart price extraction: Nx9bqj, _30jeq3, _16Jk6d
+    if (!currentPrice) {
+        const fkPrice = html.match(/class="(?:Nx9bqj|_30jeq3|_16Jk6d)[^"]*">\s*₹?\s*([0-9,]+(?:\.\d+)?)/i) ||
+                        html.match(/class="[^"]*Nx9bqj[^"]*">\s*₹?\s*([0-9,]+(?:\.\d+)?)/i);
+        if (fkPrice) currentPrice = parseFloat(fkPrice[1].replace(/,/g, ''));
+    }
+
+    // Modern Croma price extraction
+    if (!currentPrice) {
+        const cromaPrice = html.match(/class="(?:amount|cp-price)[^"]*">\s*₹?\s*([0-9,]+(?:\.\d+)?)/i);
+        if (cromaPrice) currentPrice = parseFloat(cromaPrice[1].replace(/,/g, ''));
+    }
+
+    // Modern Meesho price extraction
+    if (!currentPrice) {
+        const meeshoPrice = html.match(/class="[^"]*ProductPrice[^"]*">\s*₹?\s*([0-9,]+)/i) ||
+                            html.match(/"price":\s*(\d+)/i);
+        if (meeshoPrice) currentPrice = parseFloat(meeshoPrice[1].replace(/,/g, ''));
+    }
+
+    // Modern Myntra price extraction
+    if (!currentPrice) {
+        const myntraPrice = html.match(/"discounted":\s*(\d+)/i);
+        if (myntraPrice) currentPrice = parseFloat(myntraPrice[1]);
     }
 
     const amazonMrp = html.match(/(?:M\.?R\.?P\.?|List\s*Price)[\s\S]{0,150}?class="a-offscreen">\s*₹?\s*([\d,]+(?:\.\d+)?)/i) ||
@@ -1073,14 +1099,26 @@ exports.handler = async function (event, context) {
 
     let query = '';
     let inputImage = null;
+    let manualPrice = null;
     try {
         if (event.body) {
             const parsed = JSON.parse(event.body);
             query = (parsed.query || parsed.url || '').trim();
             inputImage = parsed.image || parsed.imageUrl || null;
+            if (parsed.price || parsed.manualPrice || parsed.manual_price) {
+                const p = parseFloat(parsed.price || parsed.manualPrice || parsed.manual_price);
+                if (p && p >= 49 && p <= 500000) manualPrice = p;
+            }
         }
     } catch (e) {
         query = (event.queryStringParameters && event.queryStringParameters.query) || '';
+    }
+
+    // Check if query itself has explicit price e.g. "https://flipkart.com/... ₹799"
+    const explicitPriceMatch = query.match(/(?:rs\.?|inr|₹|price\s*:?)\s*(\d{2,7})/i);
+    if (explicitPriceMatch && !manualPrice) {
+        const p = parseFloat(explicitPriceMatch[1]);
+        if (p >= 49 && p <= 500000) manualPrice = p;
     }
 
     if (!query || isInvalidTitle(query)) {
@@ -1140,7 +1178,8 @@ exports.handler = async function (event, context) {
     const isElectronics = !isBeauty && (
         [
             "realme", "redmi", "xiaomi", "oneplus", "oppo", "poco", "iqoo", "motorola", "moto", "nokia", "apple", "iphone", "samsung", "pixel", "galaxy",
-            "5g", "4g", "smartphone", "laptop", "macbook", "ipad", "tablet", "smartwatch", "tv", "earbuds", "headphone", "audio", 
+            "sony", "bose", "jbl", "boat", "noise", "boult", "zebronics", "canon", "nikon", "playstation", "xbox", "dell", "hp", "lenovo", "asus", "acer",
+            "5g", "4g", "smartphone", "laptop", "macbook", "ipad", "tablet", "smartwatch", "tv", "earbuds", "headphone", "audio", "airpods", "xm5", "xm4",
             "croma", "dimensity", "snapdragon", "intel", "amd", "ryzen", "rtx", "headset", "bluetooth", "charger", "soundbar", "speaker"
         ].some(k => new RegExp(`\\b${k}\\b`, 'i').test(text)) || (/\bvivo\b/i.test(text) && !/in[- ]vivo/i.test(text))
     );
@@ -1153,32 +1192,91 @@ exports.handler = async function (event, context) {
     else if (isFashion) category = "Fashion";
 
     // Establish base and original price
-    let basePrice = extracted.currentPrice;
+    let basePrice = manualPrice || extracted.currentPrice;
     if (!basePrice || basePrice <= 0) {
-        if (text.includes("lip liner") || text.includes("lipliner") || text.includes("kajal")) basePrice = 69;
-        else if (text.includes("lipstick") || text.includes("lip gloss") || text.includes("lip balm")) basePrice = 149;
-        else if (text.includes("serum") || text.includes("sunscreen") || text.includes("moisturizer")) basePrice = 349;
-        else if (text.includes("kurta") || text.includes("kurti") || text.includes("saree")) basePrice = 239;
-        else if (text.includes("shirt") || text.includes("dress") || text.includes("jeans")) basePrice = 499;
-        else if (text.includes("iphone 16 pro max")) basePrice = 144900;
-        else if (text.includes("iphone 16 pro")) basePrice = 119900;
-        else if (text.includes("iphone 16 plus")) basePrice = 89900;
-        else if (text.includes("iphone 16")) basePrice = 76999;
-        else if (text.includes("iphone 15 pro max")) basePrice = 134900;
-        else if (text.includes("iphone 15 pro")) basePrice = 109900;
-        else if (text.includes("iphone 15")) basePrice = 58990;
-        else if (text.includes("iphone 14")) basePrice = 52990;
-        else if (text.includes("iphone 13")) basePrice = 44990;
-        else if (text.includes("iphone")) basePrice = 59900;
-        else if (text.includes("macbook pro")) basePrice = 169900;
-        else if (text.includes("macbook air") || text.includes("macbook")) basePrice = 89900;
-        else if (text.includes("s24 ultra")) basePrice = 129999;
-        else if (text.includes("s24")) basePrice = 74999;
-        else if (text.includes("realme") || text.includes("redmi") || text.includes("oneplus") || text.includes("5g")) basePrice = 28999;
-        else if (text.includes("laptop")) basePrice = 42990;
-        else if (text.includes("phone")) basePrice = 14999;
-        else if (text.includes("earbuds")) basePrice = 1499;
-        else basePrice = 399;
+        if (text.includes('iphone 16 pro max') || text.includes('iphone 15 pro max')) basePrice = 144900;
+        else if (text.includes('iphone 16 pro') || text.includes('iphone 15 pro')) basePrice = 119900;
+        else if (text.includes('iphone 16 plus') || text.includes('iphone-16-plus')) basePrice = 89900;
+        else if (text.includes('iphone 16') || text.includes('iphone-16')) basePrice = 76999;
+        else if (text.includes('iphone 15 plus') || text.includes('15 plus')) basePrice = 76900;
+        else if (text.includes('iphone 15') || text.includes('iphone-15')) basePrice = 58999;
+        else if (text.includes('iphone 14 plus') || text.includes('14 plus')) basePrice = 59999;
+        else if (text.includes('iphone 14') || text.includes('iphone-14')) basePrice = 52999;
+        else if (text.includes('iphone 13') || text.includes('iphone-13')) basePrice = 44999;
+        else if (text.includes('iphone')) basePrice = 54990;
+        else if (text.includes('s24 ultra') || text.includes('s23 ultra') || text.includes('galaxy s24 ultra') || text.includes('galaxy s23 ultra')) basePrice = 119999;
+        else if (text.includes('s24 plus') || text.includes('s23 plus') || text.includes('galaxy s24+') || text.includes('galaxy s23+')) basePrice = 84999;
+        else if ((text.includes('s24') || text.includes('s23') || text.includes('galaxy s24') || text.includes('galaxy s23')) && !text.includes('ultra')) basePrice = 64999;
+        else if (text.includes('s24 fe') || text.includes('s23 fe')) basePrice = 39999;
+        else if (text.includes('z fold') || text.includes('galaxy fold')) basePrice = 149999;
+        else if (text.includes('z flip') || text.includes('galaxy flip')) basePrice = 79999;
+        else if (text.includes('galaxy a55') || text.includes('galaxy a54')) basePrice = 34999;
+        else if (text.includes('galaxy a35') || text.includes('galaxy a34')) basePrice = 24999;
+        else if (text.includes('galaxy m35') || text.includes('galaxy m34') || text.includes('galaxy f54')) basePrice = 16999;
+        else if (text.includes('samsung') && (text.includes('5g') || text.includes('galaxy') || text.includes('phone'))) basePrice = 24999;
+        else if ((text.includes('oneplus 12') || text.includes('oneplus 11')) && !text.includes('12r') && !text.includes('11r')) basePrice = 59999;
+        else if (text.includes('oneplus 12r') || text.includes('oneplus 11r') || text.includes('12r') || text.includes('11r')) basePrice = 39999;
+        else if (text.includes('oneplus nord 4') || text.includes('oneplus nord 3')) basePrice = 28999;
+        else if (text.includes('nord ce 4') || text.includes('nord ce 3') || text.includes('oneplus nord ce')) basePrice = 19999;
+        else if (text.includes('pixel 9 pro') || text.includes('pixel 8 pro')) basePrice = 106999;
+        else if (text.includes('pixel 9') || text.includes('pixel 8')) basePrice = 69999;
+        else if (text.includes('pixel 8a') || text.includes('pixel 7a')) basePrice = 42999;
+        else if (text.includes('iqoo 12') || text.includes('iqoo 11')) basePrice = 44999;
+        else if (text.includes('poco f6') || text.includes('poco x6 pro') || text.includes('x6 pro')) basePrice = 23999;
+        else if (text.includes('poco x6') || text.includes('poco m6')) basePrice = 13999;
+        else if (text.includes('realme 13 pro') || text.includes('realme 12 pro') || text.includes('realme gt')) basePrice = 22999;
+        else if (text.includes('realme p1') || text.includes('realme p2') || text.includes('realme p4') || text.includes('realme 12')) basePrice = 16999;
+        else if (text.includes('redmi note 13 pro') || text.includes('redmi note 12 pro')) basePrice = 21999;
+        else if (text.includes('redmi note 13') || text.includes('redmi note 12')) basePrice = 14999;
+        else if (text.includes('redmi 13c') || text.includes('redmi 12')) basePrice = 9999;
+        else if (text.includes('moto edge')) basePrice = 26999;
+        else if (text.includes('vivo v40') || text.includes('vivo v30')) basePrice = 31999;
+        else if (text.includes('phone') || text.includes('mobile') || text.includes('smartphone') || text.includes('5g')) basePrice = 17999;
+        else if (text.includes('macbook pro')) basePrice = 159900;
+        else if (text.includes('macbook air') || text.includes('m2') || text.includes('m3')) basePrice = 84990;
+        else if (text.includes('rtx 4070') || text.includes('rtx 4060')) basePrice = 79990;
+        else if (text.includes('rtx 3050') || text.includes('gaming laptop')) basePrice = 58990;
+        else if (text.includes('laptop') || text.includes('notebook')) basePrice = 44990;
+        else if (text.includes('ipad pro')) basePrice = 89900;
+        else if (text.includes('ipad air')) basePrice = 56900;
+        else if (text.includes('ipad 10') || text.includes('ipad')) basePrice = 32900;
+        else if (text.includes('galaxy tab') || text.includes('tablet')) basePrice = 24990;
+        else if (text.includes('sony wh') || text.includes('1000xm5') || text.includes('1000xm4')) basePrice = 26990;
+        else if (text.includes('bose')) basePrice = 25990;
+        else if (text.includes('airpods pro')) basePrice = 21900;
+        else if (text.includes('airpods')) basePrice = 12900;
+        else if (text.includes('airdopes 141') || text.includes('airdopes-141')) basePrice = 1199;
+        else if (text.includes('airdopes') || text.includes('boat airdopes')) basePrice = 1299;
+        else if (text.includes('earbuds') || text.includes('tws') || text.includes('bluetooth headset')) basePrice = 1499;
+        else if (text.includes('headphones') || text.includes('headset')) basePrice = 2199;
+        else if (text.includes('soundbar') || text.includes('speaker') || text.includes('jbl')) basePrice = 4999;
+        else if (text.includes('apple watch ultra')) basePrice = 82900;
+        else if (text.includes('apple watch')) basePrice = 24900;
+        else if (text.includes('galaxy watch')) basePrice = 19900;
+        else if (text.includes('pulse 2 max') || text.includes('colorfit') || text.includes('smartwatch')) basePrice = 1599;
+        else if (text.includes('oled tv') || text.includes('65 inch') || text.includes('bravia')) basePrice = 69990;
+        else if (text.includes('55 inch') || text.includes('50 inch')) basePrice = 38990;
+        else if (text.includes('43 inch')) basePrice = 24990;
+        else if (text.includes('32 inch') || text.includes('smart tv') || text.includes('tv')) basePrice = 13990;
+        else if (text.includes('refrigerator') || text.includes('fridge')) basePrice = 22990;
+        else if (text.includes('washing machine')) basePrice = 18990;
+        else if (text.includes('air conditioner') || text.includes('ac 1.5')) basePrice = 34990;
+        else if (text.includes('air jordan') || text.includes('yeezy')) basePrice = 7995;
+        else if (text.includes('nike') || text.includes('adidas') || text.includes('puma') || text.includes('sneaker') || text.includes('shoes')) basePrice = 3499;
+        else if (text.includes('safari') || text.includes('backpack') || text.includes('trolley') || text.includes('bag')) basePrice = 1299;
+        else if (text.includes('kurta') || text.includes('kurti') || text.includes('saree') || text.includes('ethnic') || text.includes('dress')) basePrice = 699;
+        else if (text.includes('jeans') || text.includes('jacket') || text.includes('shirt') || text.includes('t-shirt') || text.includes('hoodie')) basePrice = 799;
+        else if (text.includes('lip liner') || text.includes('lipliner') || text.includes('kajal')) basePrice = 99;
+        else if (text.includes('lipstick') || text.includes('lip balm')) basePrice = 249;
+        else if (text.includes('serum') || text.includes('sunscreen') || text.includes('moisturizer')) basePrice = 399;
+        else {
+            if (category === 'Electronics') basePrice = 14999;
+            else if (category === 'Fashion') basePrice = 799;
+            else if (category === 'Beauty & Personal Care') basePrice = 299;
+            else if (category === 'Footwear') basePrice = 2499;
+            else if (category === 'Bags & Luggage') basePrice = 1299;
+            else basePrice = 999;
+        }
     }
 
     let originalPrice = extracted.originalPrice;
@@ -1248,7 +1346,7 @@ exports.handler = async function (event, context) {
 
         priceList = benchmark.stores.map(s => {
             const isSource = Boolean(sourceStoreName && s.name.toLowerCase() === sourceStoreName.toLowerCase());
-            const cPrice = isSource ? (extracted.currentPrice || s.price) : s.price;
+            const cPrice = isSource ? (manualPrice || extracted.currentPrice || s.price) : s.price;
             const oPrice = benchmark.mrp;
             const disc = Math.round(((oPrice - cPrice) / oPrice) * 100);
             const isDirect = Boolean(isSource || isDirectProductUrl(s.url));

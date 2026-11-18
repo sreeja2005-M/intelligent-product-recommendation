@@ -8,9 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from backend.scrapers.amazon import scrape_amazon
-from backend.database import SessionLocal
-from backend.models import Product, ProductPrice
-from backend.scrapers.flipkart import extract_flipkart_data
+from backend.database import SessionLocal, engine, Base
 from backend.models import (
     Product,
     ProductPrice,
@@ -18,6 +16,10 @@ from backend.models import (
     SentimentAnalysis,
     FakeReviewDetection
 )
+
+# Ensure database tables exist
+Base.metadata.create_all(bind=engine)
+
 
 
 frontend_directory = Path(__file__).resolve().parent.parent / "frontend"
@@ -283,6 +285,9 @@ class ProductURLRequest(BaseModel):
 class AnalyzeQueryRequest(BaseModel):
     query: Optional[str] = ""
     image: Optional[str] = None
+    price: Optional[float] = None
+    manualPrice: Optional[float] = None
+    manual_price: Optional[float] = None
 
 
 from backend.pipeline import run_full_recommendation_pipeline
@@ -296,7 +301,8 @@ def analyze_full_pipeline(
     if not query_str or query_str.lower() in ["product from photo", "identified product", "smart buy product"]:
         return {"status": "ERROR", "message": "Please provide a valid product URL or product name."}
 
-    result = run_full_recommendation_pipeline(query_str, db)
+    m_price = request.price or request.manualPrice or request.manual_price
+    result = run_full_recommendation_pipeline(query_str, db, manual_price=m_price)
     if request.image and isinstance(result, dict) and "product" in result:
         result["product"]["image_url"] = request.image
     return result
